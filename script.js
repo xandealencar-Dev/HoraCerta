@@ -172,6 +172,14 @@ document.addEventListener('DOMContentLoaded', () => {
      * Prevents storing plaintext passwords in localStorage.
      */
     async function hashPassword(password) {
+        // Fallback for non-secure contexts (HTTP) or unsupported browsers
+        if (!window.crypto || !window.crypto.subtle) {
+            let hash = 5381;
+            for (let i = 0; i < password.length; i++) {
+                hash = (hash * 33) ^ password.charCodeAt(i);
+            }
+            return 'fallback_' + (hash >>> 0).toString(16);
+        }
         const encoder = new TextEncoder();
         const data = encoder.encode(password);
         const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
@@ -268,6 +276,21 @@ document.addEventListener('DOMContentLoaded', () => {
         formRegister.classList.add('hidden');
         formLogin.classList.remove('hidden');
     });
+
+    const linkClearStorage = document.getElementById('link-clear-storage');
+    if (linkClearStorage) {
+        linkClearStorage.addEventListener('click', (e) => {
+            e.preventDefault();
+            localStorage.removeItem(STORAGE_KEY_USERS);
+            localStorage.removeItem(STORAGE_KEY_CURRENT);
+            users = {};
+            currentUser = null;
+            showToast('Dados locais limpos com sucesso. Você pode se cadastrar novamente!', 'success');
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        });
+    }
 
     // Handle Register Submit
     formRegister.addEventListener('submit', async (e) => {
