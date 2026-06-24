@@ -61,6 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const mainBalanceCard = document.getElementById('main-balance-card');
     const balanceValueDisplay = document.getElementById('balance-value-display');
     const balanceMessageText = document.getElementById('balance-message-text');
+    const balanceMetaText = document.getElementById('balance-meta-text');
     const statContractType = document.getElementById('stat-contract-type');
     const statHoursRequired = document.getElementById('stat-hours-required');
     const statHoursRequiredDaily = document.getElementById('stat-hours-required-daily');
@@ -106,6 +107,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const metricOverallBalance = document.getElementById('metric-overall-balance');
 
     // ================= INITIALIZATION & ROUTING =================
+    attachPasswordToggleListeners();
     initializePage();
 
     function initializePage() {
@@ -154,12 +156,44 @@ document.addEventListener('DOMContentLoaded', () => {
         switchPanel('panel-summary');
     }
 
+    function getPasswordToggleIcon(isVisible) {
+        return isVisible
+            ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>'
+            : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.7 5.55A9.67 9.67 0 0 1 12 5c6.5 0 10 7 10 7a14.5 14.5 0 0 1-2.1 3.16"></path><path d="M14.12 14.12A3 3 0 0 1 9.88 9.88"></path><path d="M6.61 6.61 4 4"></path><path d="m20 20-4.61-4.61"></path><path d="M3 3l18 18"></path></svg>';
+    }
+
+    function resetPasswordVisibility() {
+        document.querySelectorAll('.password-toggle').forEach(button => {
+            const input = document.getElementById(button.dataset.target);
+            if (!input) return;
+            input.type = 'password';
+            button.setAttribute('aria-pressed', 'false');
+            button.setAttribute('aria-label', 'Mostrar senha');
+            button.innerHTML = getPasswordToggleIcon(false);
+        });
+    }
+
+    function attachPasswordToggleListeners() {
+        document.querySelectorAll('.password-toggle').forEach(button => {
+            button.addEventListener('click', () => {
+                const input = document.getElementById(button.dataset.target);
+                if (!input) return;
+                const isVisible = input.type === 'text';
+                input.type = isVisible ? 'password' : 'text';
+                button.setAttribute('aria-pressed', String(!isVisible));
+                button.setAttribute('aria-label', isVisible ? 'Mostrar senha' : 'Ocultar senha');
+                button.innerHTML = getPasswordToggleIcon(!isVisible);
+            });
+        });
+    }
+
     function clearAuthInputs() {
         loginNameInput.value = '';
         loginPasswordInput.value = '';
         registerNameInput.value = '';
         registerPasswordInput.value = '';
         registerContractSelect.selectedIndex = 0;
+        resetPasswordVisibility();
     }
 
     // ================= LOCALSTORAGE DATA ACCESS =================
@@ -572,6 +606,33 @@ showDashboard();
         return (t2 - t1) + (t4 - t3);
     }
 
+    function getDailyBalanceSummary(entry) {
+        const config = CONTRACT_CONFIGS[currentUser.contractType] || CONTRACT_CONFIGS['CLT'];
+        const dailyWorkedMinutes = calculateWorkedMinutes(entry);
+        const dailyBalanceMinutes = dailyWorkedMinutes - config.dailyTargetMinutes;
+        const absBalanceMinutes = Math.abs(dailyBalanceMinutes);
+        const likelyDelay = dailyBalanceMinutes < 0 && timeToMinutes(entry.entry) > 8 * 60;
+
+        if (dailyBalanceMinutes >= 0) {
+            return {
+                tone: 'positive',
+                label: 'Em dia',
+                detail: `Você acumulou ${minutesToHoursString(dailyBalanceMinutes)} a mais do que a meta diária.`,
+                debtMinutes: 0
+            };
+        }
+
+        return {
+            tone: 'negative',
+            label: 'Devendo horas do dia',
+            detail: likelyDelay
+                ? `Você ficou devendo ${minutesToHoursString(absBalanceMinutes)} e pode ter havido atraso de entrada.`
+                : `Você ficou devendo ${minutesToHoursString(absBalanceMinutes)} nesta jornada.`,
+            debtMinutes: absBalanceMinutes,
+            likelyDelay
+        };
+    }
+
     /**
      * Processes user entries to compute accumulated balance, weekly stats, and returns.
      */
@@ -656,6 +717,12 @@ showDashboard();
         // 1. Balance Main Display Card
         const balance = metrics.netBalanceMinutes;
         const formattedBalance = formatBalance(balance);
+        const todayStr = new Date().toISOString().split('T')[0];
+        const todayEntry = (currentUser.entries || []).find(ent => ent.date === todayStr);
+        const todaySummary = todayEntry ? getDailyBalanceSummary(todayEntry) : {
+            tone: 'warning',
+            detail: 'Ainda não há registro para hoje.'
+        };
         
         balanceValueDisplay.textContent = formattedBalance;
         
@@ -665,9 +732,15 @@ showDashboard();
         if (balance >= 0) {
             mainBalanceCard.classList.add('positive-balance');
             balanceMessageText.textContent = `Você possui ${minutesToHoursString(balance)} positivas.`;
+            balanceMetaText.textContent = todaySummary.tone === 'negative'
+                ? todaySummary.detail
+                : 'Seu saldo geral está acima da meta e o dia está dentro do esperado.';
         } else {
             mainBalanceCard.classList.add('negative-balance');
             balanceMessageText.textContent = `Você possui ${minutesToHoursString(balance)} negativas.`;
+            balanceMetaText.textContent = todaySummary.tone === 'negative'
+                ? todaySummary.detail
+                : `Seu saldo geral está negativo. Você precisa compensar ${minutesToHoursString(Math.abs(balance))}.`;
         }
 
         // 2. Metrics Info Grid
@@ -728,8 +801,6 @@ showDashboard();
         // 3. Workload Tracking Calculations
         
         // --- Daily Progress ---
-        const todayStr = new Date().toISOString().split('T')[0];
-        const todayEntry = currentUser.entries.find(ent => ent.date === todayStr);
         const dailyWorkedMinutes = todayEntry ? calculateWorkedMinutes(todayEntry) : 0;
         const dailyRequiredMinutes = config.dailyTargetMinutes;
         
@@ -748,11 +819,17 @@ showDashboard();
             alertDailyBox.classList.add('alert-success');
             alertDailyIcon.textContent = '✅';
             alertDailyText.textContent = 'Você concluiu sua carga horária do dia.';
+        } else if (todayEntry && todaySummary.tone === 'negative') {
+            alertDailyBox.classList.add('alert-danger');
+            alertDailyIcon.textContent = '⚠️';
+            alertDailyText.textContent = todaySummary.detail;
         } else {
             alertDailyBox.classList.add('alert-warning');
             alertDailyIcon.textContent = '⚠️';
             const remainingDailyMinutes = dailyRequiredMinutes - dailyWorkedMinutes;
-            alertDailyText.textContent = `Faltam ${minutesToHoursString(remainingDailyMinutes)} para completar sua jornada diária.`;
+            alertDailyText.textContent = todayEntry
+                ? `Faltam ${minutesToHoursString(remainingDailyMinutes)} para completar sua jornada diária.`
+                : 'Ainda não há registro para hoje. Registre seu ponto para acompanhar a meta diária.';
         }
         
         // --- Weekly Progress ---
@@ -777,7 +854,7 @@ showDashboard();
         } else if (balance < 0) {
             alertWeeklyBox.classList.add('alert-danger');
             alertWeeklyIcon.textContent = '⚠️';
-            alertWeeklyText.textContent = `Você está com ${minutesToHoursString(Math.abs(balance))} negativas.`;
+            alertWeeklyText.textContent = `Você ainda precisa compensar ${minutesToHoursString(Math.abs(balance))} para fechar a semana.`;
         } else {
             alertWeeklyBox.classList.add('alert-warning');
             alertWeeklyIcon.textContent = '⚠️';
@@ -973,27 +1050,25 @@ formRegisterHours.addEventListener('submit', async (e) => {
             const dailyWorkedMinutes = calculateWorkedMinutes(entry);
             const config = CONTRACT_CONFIGS[currentUser.contractType] || CONTRACT_CONFIGS['CLT'];
             const dailyBalance = dailyWorkedMinutes - config.dailyTargetMinutes;
-            const balanceSign = dailyBalance >= 0 ? '+' : '-';
             const absBalanceMin = Math.abs(dailyBalance);
-            const balH = Math.floor(absBalanceMin / 60);
-            const balM = absBalanceMin % 60;
-            const balanceStr = `${balanceSign}${balH}h ${balM.toString().padStart(2, '0')}min`;
             
             const durationSpan = document.createElement('span');
-            durationSpan.textContent = minutesToHoursString(dailyWorkedMinutes) + ' ';
+            durationSpan.textContent = minutesToHoursString(dailyWorkedMinutes);
             
-            const balanceSpan = document.createElement('span');
-            balanceSpan.textContent = `(${balanceStr})`;
-            balanceSpan.style.fontSize = '0.85rem';
-            balanceSpan.style.fontWeight = '600';
-            if (dailyBalance >= 0) {
-                balanceSpan.style.color = 'var(--color-success)';
-            } else {
-                balanceSpan.style.color = 'var(--color-danger)';
-            }
+            const statusBadge = document.createElement('div');
+            statusBadge.className = `history-status-badge ${dailyBalance >= 0 ? 'positive' : 'negative'}`;
+            const badgeText = dailyBalance >= 0
+                ? `Adiantado ${minutesToHoursString(absBalanceMin)}`
+                : `Devendo ${minutesToHoursString(absBalanceMin)}`;
+            statusBadge.textContent = dailyBalance < 0 && timeToMinutes(entry.entry) > 8 * 60
+                ? `${badgeText} • possível atraso`
+                : badgeText;
             
-            tdWorked.appendChild(durationSpan);
-            tdWorked.appendChild(balanceSpan);
+            const valueWrap = document.createElement('div');
+            valueWrap.className = 'history-hours-cell';
+            valueWrap.appendChild(durationSpan);
+            valueWrap.appendChild(statusBadge);
+            tdWorked.appendChild(valueWrap);
             tr.appendChild(tdWorked);
 
             // Actions column

@@ -654,6 +654,71 @@ button, .btn {
     z-index: 2;
 }
 
+.balance-meta {
+    font-size: 0.95rem;
+    color: rgba(255, 255, 255, 0.82);
+    margin-top: 6px;
+    position: relative;
+    z-index: 2;
+}
+
+.password-input-wrapper {
+    position: relative;
+}
+
+.password-input-wrapper input {
+    padding-right: 48px;
+}
+
+.password-toggle {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 34px;
+    height: 34px;
+    border: none;
+    background: transparent;
+    color: var(--color-text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    padding: 0;
+}
+
+.password-toggle:hover {
+    background-color: rgba(59, 130, 246, 0.08);
+    color: var(--color-primary);
+}
+
+.history-hours-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.history-status-badge {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.history-status-badge.positive {
+    background-color: rgba(16, 185, 129, 0.12);
+    color: var(--color-success);
+}
+
+.history-status-badge.negative {
+    background-color: rgba(239, 68, 68, 0.12);
+    color: var(--color-danger);
+}
+
 .balance-card-bg-icon {
     position: absolute;
     right: -20px;
