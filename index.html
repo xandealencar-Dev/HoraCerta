@@ -218,6 +218,14 @@
                                         <span class="alert-icon" id="alert-daily-icon">⚠️</span>
                                         <span class="alert-text" id="alert-daily-text">Faltam --h para completar sua jornada diária.</span>
                                     </div>
+                                    <div class="daily-markings-box">
+                                        <div class="daily-markings-title">Marcações do dia</div>
+                                        <div class="daily-markings-content" id="daily-markings-content">Carregando...</div>
+                                        <div id="observation-card" class="observation-card hidden">
+                                            <div class="observation-title">📝 Observação do Dia</div>
+                                            <div id="observation-content" class="observation-content"></div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -274,6 +282,23 @@
                                             <label for="point-exit">Horário de Saída</label>
                                             <input type="time" id="point-exit" required>
                                         </div>
+                                    </div>
+                                    <div class="input-group" id="motivo-field">
+                                        <label for="motivo">Motivo (opcional)</label>
+                                        <select id="motivo">
+                                            <option value="">Selecione</option>
+                                            <option value="Atraso">Atraso</option>
+                                            <option value="Saída antecipada">Saída antecipada</option>
+                                            <option value="Consulta médica">Consulta médica</option>
+                                            <option value="Esqueci de bater o ponto">Esqueci de bater o ponto</option>
+                                            <option value="Problema de transporte">Problema de transporte</option>
+                                            <option value="Trabalho externo">Trabalho externo</option>
+                                            <option value="Outro">Outro</option>
+                                        </select>
+                                    </div>
+                                    <div class="input-group" id="justificativa-field">
+                                        <label for="justificativa">Justificativa (opcional)</label>
+                                        <textarea id="justificativa" rows="3" maxlength="500" placeholder="Descreva o motivo caso seja necessário..."></textarea>
                                     </div>
                                     <button type="submit" class="btn-primary">Salvar Registro</button>
                                 </form>
@@ -334,6 +359,7 @@
                                             <th>Retorno Almoço</th>
                                             <th>Saída</th>
                                             <th>Horas do Dia</th>
+                                            <th>Observação</th>
                                             <th>Ações</th>
                                         </tr>
                                     </thead>
@@ -403,5 +429,30 @@
     </div>
     <script src="assets/vendor/supabase.min.js"></script>
 <script src="assets/script.js"></script>
+    <div id="justificativa-modal" class="modal-backdrop hidden">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>Justificativa sugerida</h3>
+                <button type="button" class="btn-icon modal-close" data-close-modal="justificativa-modal" aria-label="Fechar">×</button>
+            </div>
+            <div class="modal-body">
+                <p id="justificativa-modal-message">Você trabalhou menos horas que o previsto para sua jornada diária. Deseja adicionar uma justificativa?</p>
+                <div class="modal-actions">
+                    <button type="button" id="btn-add-justificativa" class="btn-primary">Adicionar Justificativa</button>
+                    <button type="button" id="btn-continue-without-justificativa" class="btn-secondary">Continuar Sem Justificativa</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="observacao-modal" class="modal-backdrop hidden">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>Detalhes da observação</h3>
+                <button type="button" class="btn-icon modal-close" data-close-modal="observacao-modal" aria-label="Fechar">×</button>
+            </div>
+            <div id="modal-observation-content" class="modal-body"></div>
+        </div>
+    </div>
 </body>
 </html>

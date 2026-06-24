@@ -26,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let users = loadUsersData();
     let currentUser = loadCurrentSession();
+    const holidayCache = {};
 
     // ================= DOM ELEMENT SELECTORS =================
     // Views
@@ -74,6 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const progressDailyFill = document.getElementById('progress-daily-fill');
     const progressDailyPercentage = document.getElementById('progress-daily-percentage');
     const alertDailyBox = document.getElementById('alert-daily-box');
+    const dailyMarkingsContent = document.getElementById('daily-markings-content');
     const alertDailyIcon = document.getElementById('alert-daily-icon');
     const alertDailyText = document.getElementById('alert-daily-text');
 
@@ -91,6 +93,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const pointLunchOutInput = document.getElementById('point-lunch-out');
     const pointLunchReturnInput = document.getElementById('point-lunch-return');
     const pointExitInput = document.getElementById('point-exit');
+    const motivoSelect = document.getElementById('motivo');
+    const justificativaTextarea = document.getElementById('justificativa');
+    const motivoField = document.getElementById('motivo-field');
+    const justificativaField = document.getElementById('justificativa-field');
+    const observationCard = document.getElementById('observation-card');
+    const observationContent = document.getElementById('observation-content');
+    const justificativaModal = document.getElementById('justificativa-modal');
+    const observacaoModal = document.getElementById('observacao-modal');
+    const modalObservationContent = document.getElementById('modal-observation-content');
+    const btnAddJustificativa = document.getElementById('btn-add-justificativa');
+    const btnContinueWithoutJustificativa = document.getElementById('btn-continue-without-justificativa');
 
     // History Panel Elements
     const tableBodyHistory = document.getElementById('table-body-history');
@@ -196,6 +209,42 @@ document.addEventListener('DOMContentLoaded', () => {
         resetPasswordVisibility();
     }
 
+    function showModal(modalElement) {
+        if (modalElement) modalElement.classList.remove('hidden');
+    }
+
+    function hideModal(modalElement) {
+        if (modalElement) modalElement.classList.add('hidden');
+    }
+
+    function highlightJustificativaFields() {
+        [motivoField, justificativaField].forEach(field => field?.classList.add('highlight-justificativa'));
+    }
+
+    function clearJustificativaHighlight() {
+        [motivoField, justificativaField].forEach(field => field?.classList.remove('highlight-justificativa'));
+    }
+
+    function resetJustificativaForm() {
+        motivoSelect.value = '';
+        justificativaTextarea.value = '';
+        clearJustificativaHighlight();
+    }
+
+    document.querySelectorAll('[data-close-modal]').forEach(button => {
+        button.addEventListener('click', () => {
+            const targetId = button.getAttribute('data-close-modal');
+            const target = document.getElementById(targetId);
+            hideModal(target);
+        });
+    });
+
+    document.addEventListener('click', (event) => {
+        if (event.target.classList.contains('modal-backdrop')) {
+            hideModal(event.target);
+        }
+    });
+
     // ================= LOCALSTORAGE DATA ACCESS =================
     function loadUsersData() {
         const data = localStorage.getItem(STORAGE_KEY_USERS);
@@ -237,7 +286,9 @@ async function carregarPontosDoSupabase() {
         entry: ponto.entrada,
         lunchOut: ponto.saida_almoco,
         lunchReturn: ponto.retorno_almoco,
-        exit: ponto.saida
+        exit: ponto.saida,
+        motivo: ponto.motivo || '',
+        justificativa: ponto.justificativa || ''
     }));
 
     setCurrentSession(currentUser);
@@ -575,6 +626,115 @@ showDashboard();
         return `${h}h ${m.toString().padStart(2, '0')}min`;
     }
 
+    function getContractConfig(contractType) {
+        return CONTRACT_CONFIGS[contractType] || CONTRACT_CONFIGS['CLT'];
+    }
+
+    function formatDateString(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    function getEasterDate(year) {
+        const a = year % 19;
+        const b = Math.floor(year / 100);
+        const c = year % 100;
+        const d = Math.floor(b / 4);
+        const e = b % 4;
+        const f = Math.floor((b + 8) / 25);
+        const g = Math.floor((b - f + 1) / 3);
+        const h = (19 * a + b - d - g + 15) % 30;
+        const i = Math.floor(c / 4);
+        const k = c % 4;
+        const l = (32 + 2 * e + 2 * i - h - k) % 7;
+        const m = Math.floor((a + 11 * h + 22 * l) / 451);
+        const month = Math.floor((h + l - 7 * m + 114) / 31);
+        const day = ((h + l - 7 * m + 114) % 31) + 1;
+        return new Date(year, month - 1, day);
+    }
+
+    function getBrazilHolidays(year) {
+        if (holidayCache[year]) {
+            return holidayCache[year];
+        }
+
+        const holidays = [];
+        const fixedHolidays = [
+            { month: 1, day: 1, name: 'Confraternização Universal' },
+            { month: 4, day: 21, name: 'Tiradentes' },
+            { month: 5, day: 1, name: 'Dia do Trabalho' },
+            { month: 9, day: 7, name: 'Independência do Brasil' },
+            { month: 10, day: 12, name: 'Nossa Senhora Aparecida' },
+            { month: 11, day: 2, name: 'Finados' },
+            { month: 11, day: 15, name: 'Proclamação da República' },
+            { month: 11, day: 20, name: 'Consciência Negra' },
+            { month: 12, day: 25, name: 'Natal' }
+        ];
+
+        fixedHolidays.forEach(holiday => {
+            holidays.push({
+                date: formatDateString(new Date(year, holiday.month - 1, holiday.day)),
+                name: holiday.name
+            });
+        });
+
+        const easter = getEasterDate(year);
+        const carnival = new Date(easter);
+        carnival.setDate(easter.getDate() - 47);
+        const goodFriday = new Date(easter);
+        goodFriday.setDate(easter.getDate() - 2);
+        const corpusChristi = new Date(easter);
+        corpusChristi.setDate(easter.getDate() + 60);
+
+        holidays.push(
+            { date: formatDateString(carnival), name: 'Carnaval' },
+            { date: formatDateString(goodFriday), name: 'Sexta-feira Santa' },
+            { date: formatDateString(corpusChristi), name: 'Corpus Christi' }
+        );
+
+        holidayCache[year] = holidays;
+        return holidays;
+    }
+
+    function isHoliday(dateString) {
+        if (!dateString) return false;
+        const year = dateString.slice(0, 4);
+        const holidays = getBrazilHolidays(Number(year));
+        return holidays.some(holiday => holiday.date === dateString);
+    }
+
+    function getHolidayName(dateString) {
+        if (!dateString || !isHoliday(dateString)) return null;
+        const year = dateString.slice(0, 4);
+        const holidays = getBrazilHolidays(Number(year));
+        return holidays.find(holiday => holiday.date === dateString)?.name || null;
+    }
+
+    function getDailyTargetMinutes(dateString, contractType) {
+        return isHoliday(dateString) ? 0 : getContractConfig(contractType).dailyTargetMinutes;
+    }
+
+    function getWeekRequiredMinutes(weekId, contractType) {
+        const config = getContractConfig(contractType);
+        const [year, week] = weekId.split('-W').map(Number);
+        const januaryFourth = new Date(Date.UTC(year, 0, 4));
+        const dayOfWeek = januaryFourth.getUTCDay() || 7;
+        const weekStart = new Date(januaryFourth);
+        weekStart.setUTCDate(januaryFourth.getUTCDate() + 1 - dayOfWeek + (week - 1) * 7);
+
+        let holidayCount = 0;
+        for (let i = 0; i < 7; i++) {
+            const currentDate = new Date(weekStart);
+            currentDate.setUTCDate(weekStart.getUTCDate() + i);
+            const dateString = formatDateString(currentDate);
+            if (isHoliday(dateString)) holidayCount += 1;
+        }
+
+        return Math.max(0, config.weeklyRequiredMinutes - holidayCount * config.dailyTargetMinutes);
+    }
+
     /**
      * ISO week identifier (YYYY-Www) to group history points into calendar weeks.
      */
@@ -607,11 +767,21 @@ showDashboard();
     }
 
     function getDailyBalanceSummary(entry) {
-        const config = CONTRACT_CONFIGS[currentUser.contractType] || CONTRACT_CONFIGS['CLT'];
+        const config = getContractConfig(currentUser.contractType);
+        const dailyTargetMinutes = getDailyTargetMinutes(entry.date, currentUser.contractType);
         const dailyWorkedMinutes = calculateWorkedMinutes(entry);
-        const dailyBalanceMinutes = dailyWorkedMinutes - config.dailyTargetMinutes;
+        const dailyBalanceMinutes = dailyWorkedMinutes - dailyTargetMinutes;
         const absBalanceMinutes = Math.abs(dailyBalanceMinutes);
         const likelyDelay = dailyBalanceMinutes < 0 && timeToMinutes(entry.entry) > 8 * 60;
+
+        if (isHoliday(entry.date)) {
+            return {
+                tone: 'positive',
+                label: 'Feriado',
+                detail: `Dia de ${getHolidayName(entry.date) || 'feriado'} sem obrigação de jornada.`,
+                debtMinutes: 0
+            };
+        }
 
         if (dailyBalanceMinutes >= 0) {
             return {
@@ -652,7 +822,6 @@ showDashboard();
         // Find all unique weeks present in user entries
         const uniqueWeeks = new Set();
         let totalWorkedMinutes = 0;
-        const config = CONTRACT_CONFIGS[currentUser.contractType] || CONTRACT_CONFIGS['CLT'];
 
         sortedEntries.forEach(entry => {
             const worked = calculateWorkedMinutes(entry);
@@ -662,8 +831,10 @@ showDashboard();
             uniqueWeeks.add(weekId);
         });
 
-        // Required hours based on unique calendar weeks logged * weekly requirement
-        const totalRequiredMinutes = uniqueWeeks.size * config.weeklyRequiredMinutes;
+        // Required hours based on weeks present, reducing weekly target when holidays occur
+        const totalRequiredMinutes = Array.from(uniqueWeeks).reduce((sum, weekId) => {
+            return sum + getWeekRequiredMinutes(weekId, currentUser.contractType);
+        }, 0);
         const netBalanceMinutes = totalWorkedMinutes - totalRequiredMinutes;
 
         // Group worked hours by week for weekly stats
@@ -691,10 +862,10 @@ showDashboard();
     function computeCurrentWeekMetrics(weeksMap) {
         const todayStr = new Date().toISOString().split('T')[0];
         const currentWeekId = getWeekIdentifier(todayStr);
-        const config = CONTRACT_CONFIGS[currentUser.contractType] || CONTRACT_CONFIGS['CLT'];
+        const config = getContractConfig(currentUser.contractType);
         
         const workedMinutes = weeksMap[currentWeekId] || 0;
-        const requiredMinutes = config.weeklyRequiredMinutes;
+        const requiredMinutes = getWeekRequiredMinutes(currentWeekId, currentUser.contractType);
         const diffMinutes = workedMinutes - requiredMinutes;
 
         return {
@@ -712,7 +883,7 @@ showDashboard();
      */
     function updateDashboardData() {
         const metrics = computeOverallMetrics();
-        const config = CONTRACT_CONFIGS[currentUser.contractType] || CONTRACT_CONFIGS['CLT'];
+        const config = getContractConfig(currentUser.contractType);
         
         // 1. Balance Main Display Card
         const balance = metrics.netBalanceMinutes;
@@ -723,6 +894,7 @@ showDashboard();
             tone: 'warning',
             detail: 'Ainda não há registro para hoje.'
         };
+        const holidayName = getHolidayName(todayStr);
         
         balanceValueDisplay.textContent = formattedBalance;
         
@@ -734,13 +906,17 @@ showDashboard();
             balanceMessageText.textContent = `Você possui ${minutesToHoursString(balance)} positivas.`;
             balanceMetaText.textContent = todaySummary.tone === 'negative'
                 ? todaySummary.detail
-                : 'Seu saldo geral está acima da meta e o dia está dentro do esperado.';
+                : holidayName
+                    ? `Hoje é feriado (${holidayName}) e a jornada não gera saldo negativo.`
+                    : 'Seu saldo geral está acima da meta e o dia está dentro do esperado.';
         } else {
             mainBalanceCard.classList.add('negative-balance');
             balanceMessageText.textContent = `Você possui ${minutesToHoursString(balance)} negativas.`;
             balanceMetaText.textContent = todaySummary.tone === 'negative'
                 ? todaySummary.detail
-                : `Seu saldo geral está negativo. Você precisa compensar ${minutesToHoursString(Math.abs(balance))}.`;
+                : holidayName
+                    ? `Hoje é feriado (${holidayName}) e a jornada não gera saldo negativo.`
+                    : `Seu saldo geral está negativo. Você precisa compensar ${minutesToHoursString(Math.abs(balance))}.`;
         }
 
         // 2. Metrics Info Grid
@@ -802,20 +978,25 @@ showDashboard();
         
         // --- Daily Progress ---
         const dailyWorkedMinutes = todayEntry ? calculateWorkedMinutes(todayEntry) : 0;
-        const dailyRequiredMinutes = config.dailyTargetMinutes;
+        const dailyRequiredMinutes = getDailyTargetMinutes(todayStr, currentUser.contractType);
+        const isTodayHoliday = Boolean(holidayName);
         
         // Calculate daily percentage
-        const dailyPercentage = Math.min(100, Math.round((dailyWorkedMinutes / dailyRequiredMinutes) * 100));
+        const dailyPercentage = dailyRequiredMinutes === 0 ? 100 : Math.min(100, Math.round((dailyWorkedMinutes / dailyRequiredMinutes) * 100));
         
         // Update daily elements
-        trackingDailySubtitle.textContent = `Meta: ${dailyRequiredMinutes / 60}h`;
-        progressDailyFill.style.width = `${dailyPercentage}%`;
-        progressDailyPercentage.textContent = `${dailyPercentage}%`;
+        trackingDailySubtitle.textContent = isTodayHoliday ? `Feriado • ${holidayName}` : `Meta: ${dailyRequiredMinutes / 60}h`;
+        progressDailyFill.style.width = `${dailyRequiredMinutes === 0 ? 100 : dailyPercentage}%`;
+        progressDailyPercentage.textContent = isTodayHoliday ? 'Feriado' : `${dailyPercentage}%`;
         
         // Remove prior alert classes
         alertDailyBox.classList.remove('alert-warning', 'alert-success', 'alert-danger');
         
-        if (dailyWorkedMinutes >= dailyRequiredMinutes) {
+        if (isTodayHoliday) {
+            alertDailyBox.classList.add('alert-success');
+            alertDailyIcon.textContent = '✅';
+            alertDailyText.textContent = 'Feriado: a jornada diária não gera obrigação de horas.';
+        } else if (dailyWorkedMinutes >= dailyRequiredMinutes) {
             alertDailyBox.classList.add('alert-success');
             alertDailyIcon.textContent = '✅';
             alertDailyText.textContent = 'Você concluiu sua carga horária do dia.';
@@ -830,6 +1011,23 @@ showDashboard();
             alertDailyText.textContent = todayEntry
                 ? `Faltam ${minutesToHoursString(remainingDailyMinutes)} para completar sua jornada diária.`
                 : 'Ainda não há registro para hoje. Registre seu ponto para acompanhar a meta diária.';
+        }
+
+        if (todayEntry) {
+            const entrySummary = getDailyBalanceSummary(todayEntry);
+            dailyMarkingsContent.innerHTML = `<strong>${entrySummary.label}</strong><br>${entrySummary.detail}`;
+            if (todayEntry.justificativa) {
+                observationCard.classList.remove('hidden');
+                observationContent.innerHTML = `<strong>Motivo:</strong> ${todayEntry.motivo || 'Não informado'}<br><br><strong>Justificativa:</strong> ${todayEntry.justificativa}`;
+            } else {
+                observationCard.classList.add('hidden');
+            }
+        } else if (isTodayHoliday) {
+            dailyMarkingsContent.textContent = `Não houveram marcações neste dia. ${holidayName ? `(${holidayName})` : ''}`.trim();
+            observationCard.classList.add('hidden');
+        } else {
+            dailyMarkingsContent.textContent = 'Não houveram marcações neste dia.';
+            observationCard.classList.add('hidden');
         }
         
         // --- Weekly Progress ---
@@ -881,6 +1079,8 @@ formRegisterHours.addEventListener('submit', async (e) => {
     const lunchOut = pointLunchOutInput.value;
     const lunchReturn = pointLunchReturnInput.value;
     const exit = pointExitInput.value;
+    const motivo = motivoSelect.value;
+    const justificativa = justificativaTextarea.value.trim();
 
     console.log("CLICOU EM SALVAR REGISTRO");
     console.log("USUÁRIO ATUAL:", currentUser);
@@ -930,13 +1130,25 @@ formRegisterHours.addEventListener('submit', async (e) => {
         return;
     }
 
+    const workedMinutes = calculateWorkedMinutes({ entry, lunchOut, lunchReturn, exit });
+    const targetMinutes = getDailyTargetMinutes(date, currentUser.contractType);
+    const shouldSuggestJustificativa = targetMinutes > 0 && workedMinutes < targetMinutes && (!motivo && !justificativa);
+
+    if (shouldSuggestJustificativa) {
+        highlightJustificativaFields();
+        showModal(justificativaModal);
+        return;
+    }
+
     const registro = {
         usuario_id: currentUser.id,
         data: date,
         entrada: entry,
         saida_almoco: lunchOut,
         retorno_almoco: lunchReturn,
-        saida: exit
+        saida: exit,
+        motivo,
+        justificativa
     };
 
     console.log("ENVIANDO PARA SUPABASE:", registro);
@@ -961,7 +1173,9 @@ formRegisterHours.addEventListener('submit', async (e) => {
         entry: data.entrada,
         lunchOut: data.saida_almoco,
         lunchReturn: data.retorno_almoco,
-        exit: data.saida
+        exit: data.saida,
+        motivo: data.motivo || '',
+        justificativa: data.justificativa || ''
     };
 
     if (!currentUser.entries) {
@@ -980,11 +1194,74 @@ formRegisterHours.addEventListener('submit', async (e) => {
     pointLunchOutInput.value = "";
     pointLunchReturnInput.value = "";
     pointExitInput.value = "";
+    resetJustificativaForm();
 
     setTimeout(() => {
         switchPanel("panel-summary");
     }, 800);
 });
+
+    btnAddJustificativa.addEventListener('click', () => {
+        hideModal(justificativaModal);
+        motivoSelect.focus();
+        highlightJustificativaFields();
+    });
+
+    btnContinueWithoutJustificativa.addEventListener('click', async () => {
+        hideModal(justificativaModal);
+        clearJustificativaHighlight();
+
+        const date = pointDateInput.value;
+        const entry = pointEntryInput.value;
+        const lunchOut = pointLunchOutInput.value;
+        const lunchReturn = pointLunchReturnInput.value;
+        const exit = pointExitInput.value;
+
+        const registro = {
+            usuario_id: currentUser.id,
+            data: date,
+            entrada: entry,
+            saida_almoco: lunchOut,
+            retorno_almoco: lunchReturn,
+            saida: exit,
+            motivo: '',
+            justificativa: ''
+        };
+
+        const { data, error } = await supabaseClient
+            .from("registros_ponto")
+            .insert([registro])
+            .select()
+            .single();
+
+        if (error) {
+            showToast("Erro ao salvar ponto: " + error.message, "error");
+            return;
+        }
+
+        const novoRegistroLocal = {
+            id: String(data.id),
+            date: data.data,
+            entry: data.entrada,
+            lunchOut: data.saida_almoco,
+            lunchReturn: data.retorno_almoco,
+            exit: data.saida,
+            motivo: data.motivo || '',
+            justificativa: data.justificativa || ''
+        };
+
+        currentUser.entries.push(novoRegistroLocal);
+        setCurrentSession(currentUser);
+        updateDashboardData();
+        renderHistoryTable();
+        showToast("Registro salvo sem justificativa.", "info");
+        resetJustificativaForm();
+        pointEntryInput.value = '';
+        pointLunchOutInput.value = '';
+        pointLunchReturnInput.value = '';
+        pointExitInput.value = '';
+        setTimeout(() => switchPanel('panel-summary'), 800);
+    });
 
     // ================= HISTORIC LIST RENDERING =================
     filterMonthInput.addEventListener('change', renderHistoryTable);
@@ -1048,21 +1325,26 @@ formRegisterHours.addEventListener('submit', async (e) => {
             // Daily Total column
             const tdWorked = document.createElement('td');
             const dailyWorkedMinutes = calculateWorkedMinutes(entry);
-            const config = CONTRACT_CONFIGS[currentUser.contractType] || CONTRACT_CONFIGS['CLT'];
-            const dailyBalance = dailyWorkedMinutes - config.dailyTargetMinutes;
+            const dailyTargetMinutes = getDailyTargetMinutes(entry.date, currentUser.contractType);
+            const dailyBalance = dailyWorkedMinutes - dailyTargetMinutes;
             const absBalanceMin = Math.abs(dailyBalance);
             
             const durationSpan = document.createElement('span');
-            durationSpan.textContent = minutesToHoursString(dailyWorkedMinutes);
+            durationSpan.textContent = isHoliday(entry.date) ? '00h 00min' : minutesToHoursString(dailyWorkedMinutes);
             
             const statusBadge = document.createElement('div');
-            statusBadge.className = `history-status-badge ${dailyBalance >= 0 ? 'positive' : 'negative'}`;
-            const badgeText = dailyBalance >= 0
-                ? `Adiantado ${minutesToHoursString(absBalanceMin)}`
-                : `Devendo ${minutesToHoursString(absBalanceMin)}`;
-            statusBadge.textContent = dailyBalance < 0 && timeToMinutes(entry.entry) > 8 * 60
-                ? `${badgeText} • possível atraso`
-                : badgeText;
+            if (isHoliday(entry.date)) {
+                statusBadge.className = 'history-status-badge positive';
+                statusBadge.textContent = `Feriado • ${getHolidayName(entry.date) || 'Sem obrigação'}`;
+            } else {
+                statusBadge.className = `history-status-badge ${dailyBalance >= 0 ? 'positive' : 'negative'}`;
+                const badgeText = dailyBalance >= 0
+                    ? `Adiantado ${minutesToHoursString(absBalanceMin)}`
+                    : `Devendo ${minutesToHoursString(absBalanceMin)}`;
+                statusBadge.textContent = dailyBalance < 0 && timeToMinutes(entry.entry) > 8 * 60
+                    ? `${badgeText} • possível atraso`
+                    : badgeText;
+            }
             
             const valueWrap = document.createElement('div');
             valueWrap.className = 'history-hours-cell';
@@ -1070,6 +1352,22 @@ formRegisterHours.addEventListener('submit', async (e) => {
             valueWrap.appendChild(statusBadge);
             tdWorked.appendChild(valueWrap);
             tr.appendChild(tdWorked);
+
+            // Observation column
+            const tdObservation = document.createElement('td');
+            const btnViewObservation = document.createElement('button');
+            btnViewObservation.className = 'view-observation-btn';
+            btnViewObservation.textContent = '📝 Ver';
+            btnViewObservation.addEventListener('click', () => {
+                const text = entry.justificativa?.trim();
+                const motivoText = entry.motivo?.trim() || 'Não informado';
+                modalObservationContent.innerHTML = text
+                    ? `<p><strong>Motivo:</strong> ${motivoText}</p><p><strong>Justificativa:</strong> ${text}</p>`
+                    : '<p>Nenhuma observação registrada.</p>';
+                showModal(observacaoModal);
+            });
+            tdObservation.appendChild(btnViewObservation);
+            tr.appendChild(tdObservation);
 
             // Actions column
             const tdActions = document.createElement('td');
