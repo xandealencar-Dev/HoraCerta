@@ -548,19 +548,30 @@ showDashboard();
         }
     });
 
+    function isMobileViewport() {
+        return window.matchMedia('(max-width: 992px)').matches;
+    }
+
+    function closeSidebarOnMobile() {
+        if (isMobileViewport()) {
+            viewDashboardLayout.classList.remove('sidebar-open');
+        }
+    }
+
     sidebarNavItems.forEach(item => {
         item.addEventListener('click', () => {
             const targetPanelId = item.getAttribute('data-target');
             switchPanel(targetPanelId);
-            
-            // Close sidebar drawer on mobile
-            if (window.innerWidth <= 992) {
-                viewDashboardLayout.classList.remove('sidebar-open');
-            }
+            closeSidebarOnMobile();
         });
     });
 
     function switchPanel(panelId) {
+        // Close mobile sidebar when navigating panels
+        if (viewDashboardLayout.classList.contains('sidebar-open')) {
+            viewDashboardLayout.classList.remove('sidebar-open');
+        }
+
         // Toggle active nav styling
         sidebarNavItems.forEach(btn => {
             if (btn.getAttribute('data-target') === panelId) {
@@ -1295,42 +1306,99 @@ formRegisterHours.addEventListener('submit', async (e) => {
         renderHistoryTable();
     });
 
-    function populateHistoryMonthOptions() {
+    function getCompetenceIdentifierFromDate(date) {
+        const [year, month, day] = date.split('-').map(Number);
+        if (isNaN(year) || isNaN(month) || isNaN(day)) {
+            return null;
+        }
+
+        const competenceMonth = day >= 26 ? month + 1 : month;
+        const competenceYear = day >= 26 && competenceMonth === 13 ? year + 1 : year;
+        const normalizedMonth = competenceMonth === 13 ? 1 : competenceMonth;
+
+        return `${competenceYear}-${String(normalizedMonth).padStart(2, '0')}`;
+    }
+
+    function getCompetenceRange(competenceId) {
+        const [year, month] = competenceId.split('-').map(Number);
+        if (isNaN(year) || isNaN(month)) {
+            return null;
+        }
+
+        const endDate = new Date(year, month - 1, 25);
+        const startDate = new Date(year, month - 2, 26);
+
+        const toIso = date => date.toISOString().split('T')[0];
+        return {
+            start: toIso(startDate),
+            end: toIso(endDate)
+        };
+    }
+
+    function getCompetenceLabel(competenceId) {
+        if (!competenceId) return 'Todas as competências';
+        const [year, month] = competenceId.split('-');
+        const monthNames = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+        return `Competência: ${monthNames[Number(month) - 1]}/${year}`;
+    }
+
+    function getCompetencePeriodLabel(competenceId) {
+        if (!competenceId) return 'Período: Todos os registros';
+        const range = getCompetenceRange(competenceId);
+        if (!range) return 'Período: —';
+        return `Período: ${range.start.split('-').reverse().join('/')} a ${range.end.split('-').reverse().join('/')}`;
+    }
+
+    function populateHistoryCompetenceOptions() {
         const selectedValue = filterMonthInput.value || '';
-        const monthSet = new Set();
+        const competenceSet = new Set();
 
         if (currentUser.entries) {
             currentUser.entries.forEach(entry => {
                 if (entry.date) {
-                    const [year, month] = entry.date.split('-');
-                    if (year && month) {
-                        monthSet.add(`${year}-${month}`);
+                    const competenceId = getCompetenceIdentifierFromDate(entry.date);
+                    if (competenceId) {
+                        competenceSet.add(competenceId);
                     }
                 }
             });
         }
 
-        const months = Array.from(monthSet).sort((a, b) => b.localeCompare(a));
+        const competenceIds = Array.from(competenceSet).sort((a, b) => b.localeCompare(a));
         filterMonthInput.replaceChildren();
 
         const defaultOption = document.createElement('option');
         defaultOption.value = '';
-        defaultOption.textContent = 'Todos os meses';
+        defaultOption.textContent = 'Todas as competências';
         filterMonthInput.appendChild(defaultOption);
 
-        months.forEach(monthValue => {
+        competenceIds.forEach(competenceId => {
             const option = document.createElement('option');
-            option.value = monthValue;
-            const [year, month] = monthValue.split('-');
-            option.textContent = `${month}/${year}`;
+            option.value = competenceId;
+            const [year, month] = competenceId.split('-');
+            const monthNames = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+            option.textContent = `${monthNames[Number(month) - 1]}/${year}`;
             filterMonthInput.appendChild(option);
         });
 
-        filterMonthInput.value = months.includes(selectedValue) ? selectedValue : '';
+        filterMonthInput.value = competenceIds.includes(selectedValue) ? selectedValue : '';
+    }
+
+    function getEntriesForCompetence(entries, competenceId) {
+        if (!competenceId) return entries;
+        const range = getCompetenceRange(competenceId);
+        if (!range) return entries;
+        return entries.filter(ent => ent.date >= range.start && ent.date <= range.end);
+    }
+
+    function updateHistoryCompetenceSummary(competenceId) {
+        historyCompetenceName.textContent = getCompetenceLabel(competenceId);
+        historyCompetencePeriod.textContent = getCompetencePeriodLabel(competenceId);
     }
 
     function renderHistoryTable() {
-        populateHistoryMonthOptions();
+        populateHistoryCompetenceOptions();
+        updateHistoryCompetenceSummary(filterMonthInput.value);
         tableBodyHistory.replaceChildren();
         
         if (!currentUser.entries || currentUser.entries.length === 0) {
@@ -1338,15 +1406,10 @@ formRegisterHours.addEventListener('submit', async (e) => {
             return;
         }
 
-        const filterMonth = filterMonthInput.value; // YYYY-MM format
+        const selectedCompetence = filterMonthInput.value;
         
-        // Filter and sort descending by date
-        let filteredEntries = [...currentUser.entries];
-        
-        if (filterMonth) {
-            filteredEntries = filteredEntries.filter(ent => ent.date.startsWith(filterMonth));
-        }
-
+        // Filter and sort descending by date based on competence range
+        let filteredEntries = getEntriesForCompetence([...currentUser.entries], selectedCompetence);
         filteredEntries.sort((a, b) => new Date(b.date) - new Date(a.date));
 
         if (filteredEntries.length === 0) {
@@ -1450,14 +1513,45 @@ formRegisterHours.addEventListener('submit', async (e) => {
         });
     }
 
-    function deleteHistoryEntry(entryId) {
+    async function deleteHistoryEntry(entryId) {
+        console.log('Tentando excluir registro de ponto:', entryId);
+        if (!currentUser || !currentUser.id) {
+            showToast('Erro: usuário não autenticado para exclusão.', 'error');
+            console.error('deleteHistoryEntry falhou: currentUser inválido', currentUser);
+            return;
+        }
+
+        const deleteId = Number(entryId) || entryId;
+        console.log('ID enviado para Supabase DELETE:', deleteId);
+
+        const response = await supabaseClient
+            .from('registros_ponto')
+            .delete()
+            .select()
+            .eq('id', deleteId);
+
+        console.log('Resposta do Supabase DELETE:', response);
+
+        const { data, error } = response;
+
+        if (error) {
+            showToast('Erro ao excluir registro: ' + error.message, 'error');
+            console.error('Supabase DELETE error:', error);
+            return;
+        }
+
+        if (!data || data.length === 0) {
+            showToast('Exclusão não realizada: registro não encontrado ou permissão negada.', 'error');
+            console.error('Supabase DELETE sem dados retornados, possível ID incorreto ou RLS bloqueando a exclusão.', { deleteId, response });
+            return;
+        }
+
         currentUser.entries = currentUser.entries.filter(ent => ent.id !== entryId);
-        
         const userKey = currentUser.name.toLowerCase().replace(/\s+/g, '_');
         users[userKey] = currentUser;
         saveUsersData();
-        
-        showToast('Registro excluído do histórico.', 'info');
+
+        showToast('Registro excluído do histórico.', 'success');
         renderHistoryTable();
     }
 

@@ -351,12 +351,16 @@
                                     <p class="text-secondary">Lista completa de todos os dias cadastrados no sistema.</p>
                                 </div>
                                 <div class="filter-actions">
-                                    <label for="filter-month" class="filter-label">Visualizar por mês</label>
-                                    <select id="filter-month" class="input-filter" title="Selecione um mês para filtrar o histórico">
-                                        <option value="">Todos os meses</option>
+                                    <label for="filter-month" class="filter-label">Competência</label>
+                                    <select id="filter-month" class="input-filter" title="Selecione a competência da folha para filtrar o histórico">
+                                        <option value="">Todas as competências</option>
                                     </select>
                                     <button id="btn-clear-filter" class="btn-secondary">Limpar</button>
                                 </div>
+                            </div>
+                            <div class="history-competence-summary" style="margin: 16px 0 0; display: flex; gap: 1rem; flex-wrap: wrap;">
+                                <span id="history-competence-name" class="text-secondary">Competência: Todas as competências</span>
+                                <span id="history-competence-period" class="text-secondary">Período: Todos os registros</span>
                             </div>
                             <div class="table-container">
                                 <table class="custom-table" id="table-history-entries">
@@ -378,7 +382,7 @@
                                 </table>
                                 <div id="history-empty-message" class="empty-state hidden">
                                     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                                    <p>Nenhum registro de ponto encontrado para o período selecionado.</p>
+                                    <p>Nenhum registro de ponto encontrado para a competência selecionada.</p>
                                     <button class="btn-secondary" id="btn-empty-state-go-register">Lançar Meu Primeiro Ponto</button>
                                 </div>
                             </div>
