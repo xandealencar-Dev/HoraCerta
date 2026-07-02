@@ -1295,7 +1295,42 @@ formRegisterHours.addEventListener('submit', async (e) => {
         renderHistoryTable();
     });
 
+    function populateHistoryMonthOptions() {
+        const selectedValue = filterMonthInput.value || '';
+        const monthSet = new Set();
+
+        if (currentUser.entries) {
+            currentUser.entries.forEach(entry => {
+                if (entry.date) {
+                    const [year, month] = entry.date.split('-');
+                    if (year && month) {
+                        monthSet.add(`${year}-${month}`);
+                    }
+                }
+            });
+        }
+
+        const months = Array.from(monthSet).sort((a, b) => b.localeCompare(a));
+        filterMonthInput.replaceChildren();
+
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = 'Todos os meses';
+        filterMonthInput.appendChild(defaultOption);
+
+        months.forEach(monthValue => {
+            const option = document.createElement('option');
+            option.value = monthValue;
+            const [year, month] = monthValue.split('-');
+            option.textContent = `${month}/${year}`;
+            filterMonthInput.appendChild(option);
+        });
+
+        filterMonthInput.value = months.includes(selectedValue) ? selectedValue : '';
+    }
+
     function renderHistoryTable() {
+        populateHistoryMonthOptions();
         tableBodyHistory.replaceChildren();
         
         if (!currentUser.entries || currentUser.entries.length === 0) {
