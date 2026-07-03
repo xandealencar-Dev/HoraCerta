@@ -124,7 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
     attachPasswordToggleListeners();
     initializePage();
 
-    function initializePage() {
+    async function initializePage() {
         // Update header date
         const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
         headerDate.textContent = new Date().toLocaleDateString('pt-BR', options);
@@ -135,12 +135,16 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Router check
         if (currentUser) {
-            showDashboard();
-            carregarPontosDoSupabase().then(() => {
-                updateDashboardData();
-            }).catch(err => {
+            try {
+                await carregarPontosDoSupabase();
+            } catch (err) {
                 console.error("Erro ao sincronizar dados com Supabase no início:", err);
-            });
+                if (currentUser) {
+                    currentUser.entries = [];
+                    setCurrentSession(currentUser);
+                }
+            }
+            showDashboard();
         } else {
             showAuth();
         }
@@ -266,8 +270,19 @@ function setCurrentSession(userData) {
     currentUser = userData;
 }
 
+function normalizeEntryId(entryId) {
+    if (entryId === null || entryId === undefined) return '';
+    return String(entryId);
+}
+
 async function carregarPontosDoSupabase() {
-    if (!currentUser || !currentUser.id) return;
+    if (!currentUser || !currentUser.id) {
+        if (currentUser) {
+            currentUser.entries = [];
+            setCurrentSession(currentUser);
+        }
+        return;
+    }
 
     const { data, error } = await supabaseClient
         .from("registros_ponto")
@@ -278,11 +293,16 @@ async function carregarPontosDoSupabase() {
     if (error) {
         showToast("Erro ao carregar pontos: " + error.message, "error");
         currentUser.entries = [];
-        return;
+        setCurrentSession(currentUser);
+        throw error;
     }
 
-    currentUser.entries = data.map(ponto => ({
-        id: ponto.id,
+    const filteredData = data.filter(ponto => {
+        return !ponto.deleted && !ponto.is_deleted && !ponto.isDeleted && !ponto.deleted_at && !ponto.deletedAt;
+    });
+
+    currentUser.entries = filteredData.map(ponto => ({
+        id: normalizeEntryId(ponto.id),
         date: ponto.data,
         entry: ponto.entrada,
         lunchOut: ponto.saida_almoco,
@@ -1521,14 +1541,16 @@ formRegisterHours.addEventListener('submit', async (e) => {
             return;
         }
 
-        const deleteId = Number(entryId) || entryId;
+        const normalizedEntryId = normalizeEntryId(entryId);
+        const deleteId = /^\\d+$/.test(normalizedEntryId) ? Number(normalizedEntryId) : normalizedEntryId;
         console.log('ID enviado para Supabase DELETE:', deleteId);
 
         const response = await supabaseClient
             .from('registros_ponto')
             .delete()
             .select()
-            .eq('id', deleteId);
+            .eq('id', deleteId)
+            .eq('usuario_id', currentUser.id);
 
         console.log('Resposta do Supabase DELETE:', response);
 
@@ -1546,13 +1568,16 @@ formRegisterHours.addEventListener('submit', async (e) => {
             return;
         }
 
-        currentUser.entries = currentUser.entries.filter(ent => ent.id !== entryId);
+        await carregarPontosDoSupabase();
+        updateDashboardData();
+        renderHistoryTable();
+
         const userKey = currentUser.name.toLowerCase().replace(/\s+/g, '_');
         users[userKey] = currentUser;
         saveUsersData();
+        setCurrentSession(currentUser);
 
         showToast('Registro excluído do histórico.', 'success');
-        renderHistoryTable();
     }
 
     // ================= ANALYTICS & CUSTOM SVG CHART =================
