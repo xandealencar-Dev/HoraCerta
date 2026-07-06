@@ -2,11 +2,8 @@ const SUPABASE_URL = "https://nxzvxluhetjktfohhuxy.supabase.co";
 const SUPABASE_KEY = "sb_publishable_gmxU_wrHczTHQrxvyHx8wQ_JPRe0z2v";
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const FinanceHelpers = window.HoraCertaFinance;
 
-/**
- * HoraCerta - Controle de Saldo de Horas
- * Core Application Script
- */
 document.addEventListener('DOMContentLoaded', () => {
     // ================= STATE & CONFIGURATION =================
     const STORAGE_KEY_USERS = 'horacerta_users_data';
@@ -68,23 +65,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const statHoursRequiredDaily = document.getElementById('stat-hours-required-daily');
     const statHoursWorked = document.getElementById('stat-hours-worked');
     const statHoursDiff = document.getElementById('stat-hours-diff');
+    const statMonthlyRequirement = document.getElementById('stat-monthly-requirement');
     const statDiffIconContainer = document.getElementById('stat-diff-icon-container');
-
-    // Workload Tracking Elements
-    const trackingDailySubtitle = document.getElementById('tracking-daily-subtitle');
-    const progressDailyFill = document.getElementById('progress-daily-fill');
-    const progressDailyPercentage = document.getElementById('progress-daily-percentage');
-    const alertDailyBox = document.getElementById('alert-daily-box');
-    const dailyMarkingsContent = document.getElementById('daily-markings-content');
-    const alertDailyIcon = document.getElementById('alert-daily-icon');
-    const alertDailyText = document.getElementById('alert-daily-text');
-
-    const trackingWeeklySubtitle = document.getElementById('tracking-weekly-subtitle');
-    const progressWeeklyFill = document.getElementById('progress-weekly-fill');
-    const progressWeeklyPercentage = document.getElementById('progress-weekly-percentage');
-    const alertWeeklyBox = document.getElementById('alert-weekly-box');
-    const alertWeeklyIcon = document.getElementById('alert-weekly-icon');
-    const alertWeeklyText = document.getElementById('alert-weekly-text');
 
     // Register Form Elements
     const formRegisterHours = document.getElementById('form-register-hours');
@@ -98,8 +80,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const liberacaoEmpresaCheckbox = document.getElementById('liberacao-empresa');
     const motivoField = document.getElementById('motivo-field');
     const justificativaField = document.getElementById('justificativa-field');
-    const observationCard = document.getElementById('observation-card');
-    const observationContent = document.getElementById('observation-content');
     const justificativaModal = document.getElementById('justificativa-modal');
     const observacaoModal = document.getElementById('observacao-modal');
     const modalObservationContent = document.getElementById('modal-observation-content');
@@ -112,6 +92,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const filterMonthInput = document.getElementById('filter-month');
     const btnClearFilter = document.getElementById('btn-clear-filter');
     const btnEmptyStateGoRegister = document.getElementById('btn-empty-state-go-register');
+    const historyCompetenceName = document.getElementById('history-competence-name');
+    const historyCompetencePeriod = document.getElementById('history-competence-period');
+    const dashboardWarningCard = document.getElementById('dashboard-warning-card');
+    const dashboardWarningText = document.getElementById('dashboard-warning-text');
+    const btnGoProfileFromDashboard = document.getElementById('btn-go-profile-from-dashboard');
+    const financeSalaryValue = document.getElementById('finance-salary-value');
+    const financeDayDiscount = document.getElementById('finance-day-discount');
+    const financeMonthDiscount = document.getElementById('finance-month-discount');
+    const financeNetSalary = document.getElementById('finance-net-salary');
+    const formProfile = document.getElementById('form-profile');
+    const profileSalaryInput = document.getElementById('profile-salary');
+    const profileWorkloadSelect = document.getElementById('profile-workload');
+    const profileCustomWorkloadGroup = document.getElementById('profile-custom-workload-group');
+    const profileCustomWorkloadInput = document.getElementById('profile-custom-workload');
 
     // Analytics Panel Elements
     const svgChartContainer = document.getElementById('svg-chart-container');
@@ -169,6 +163,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Load dashboard stats
         updateDashboardData();
+        renderFinanceSummary();
+        updateProfileForm();
         
         // Reset panel view to summary
         switchPanel('panel-summary');
@@ -284,6 +280,8 @@ async function carregarPontosDoSupabase() {
         return;
     }
 
+    await carregarPerfilDoSupabase();
+
     const { data, error } = await supabaseClient
         .from("registros_ponto")
         .select("*")
@@ -314,11 +312,148 @@ async function carregarPontosDoSupabase() {
     }));
 
     setCurrentSession(currentUser);
+    renderFinanceSummary();
+    updateProfileForm();
 }
 
     function clearCurrentSession() {
         localStorage.removeItem(STORAGE_KEY_CURRENT);
         currentUser = null;
+    }
+
+    async function carregarPerfilDoSupabase() {
+        if (!currentUser || !currentUser.id) {
+            return null;
+        }
+
+        const { data, error } = await supabaseClient
+            .from('usuarios')
+            .select('id, salario, carga_horaria_mensal')
+            .eq('id', currentUser.id)
+            .maybeSingle();
+
+        if (error) {
+            console.error('Erro ao carregar perfil do usuário:', error);
+            return null;
+        }
+
+        if (data) {
+            currentUser.salario = data.salario;
+            currentUser.cargaHorariaMensal = data.carga_horaria_mensal;
+            setCurrentSession(currentUser);
+        }
+
+        return data;
+    }
+
+    async function salvarPerfilNoSupabase(payload) {
+        if (!currentUser || !currentUser.id) {
+            throw new Error('Usuário não autenticado.');
+        }
+
+        const { error } = await supabaseClient
+            .from('usuarios')
+            .update(payload)
+            .eq('id', currentUser.id);
+
+        if (error) {
+            throw error;
+        }
+
+        currentUser.salario = payload.salario;
+        currentUser.cargaHorariaMensal = payload.carga_horaria_mensal;
+        setCurrentSession(currentUser);
+    }
+
+    function getCurrentProfileConfig() {
+        return {
+            salario: Number(currentUser?.salario) || 0,
+            cargaHorariaMensal: Number(currentUser?.cargaHorariaMensal) || 0
+        };
+    }
+
+    function updateProfileForm() {
+        if (!currentUser) {
+            return;
+        }
+
+        const profileConfig = getCurrentProfileConfig();
+        profileSalaryInput.value = profileConfig.salario || '';
+        if (profileConfig.cargaHorariaMensal && [180, 200, 220].includes(profileConfig.cargaHorariaMensal)) {
+            profileWorkloadSelect.value = String(profileConfig.cargaHorariaMensal);
+            profileCustomWorkloadGroup.classList.add('hidden');
+            profileCustomWorkloadInput.value = '';
+        } else if (profileConfig.cargaHorariaMensal) {
+            profileWorkloadSelect.value = 'custom';
+            profileCustomWorkloadGroup.classList.remove('hidden');
+            profileCustomWorkloadInput.value = String(profileConfig.cargaHorariaMensal);
+        } else {
+            profileWorkloadSelect.value = '';
+            profileCustomWorkloadGroup.classList.add('hidden');
+            profileCustomWorkloadInput.value = '';
+        }
+    }
+
+    function setProfileWarningVisibility() {
+        const hasProfile = FinanceHelpers && FinanceHelpers.isProfileConfigured(currentUser);
+        if (dashboardWarningCard) {
+            dashboardWarningCard.style.display = hasProfile ? 'none' : 'flex';
+        }
+        if (dashboardWarningText) {
+            dashboardWarningText.textContent = hasProfile
+                ? 'Perfil configurado. Os descontos automáticos já estão ativos.'
+                : 'Cadastre seu salário e sua carga horária para habilitar o cálculo automático de descontos.';
+        }
+    }
+
+    function calculateEntryDiscount(entry) {
+        if (!currentUser || !FinanceHelpers || !FinanceHelpers.isProfileConfigured(currentUser)) {
+            return 0;
+        }
+
+        if (isHoliday(entry.date) || entry.liberacaoEmpresa) {
+            return 0;
+        }
+
+        const dailyTargetMinutes = getDailyTargetMinutes(entry.date, currentUser.contractType);
+        const workedMinutes = calculateWorkedMinutes(entry);
+        const motivo = (entry.motivo || '').toLowerCase();
+
+        if (motivo.includes('falta')) {
+            return FinanceHelpers.calculateFinancialDiscount(dailyTargetMinutes, currentUser.salario, currentUser.cargaHorariaMensal);
+        }
+
+        const negativeMinutes = Math.max(0, dailyTargetMinutes - workedMinutes);
+        return FinanceHelpers.calculateFinancialDiscount(negativeMinutes, currentUser.salario, currentUser.cargaHorariaMensal);
+    }
+
+    function calculateMonthlyDiscount(entries) {
+        return (entries || []).reduce((sum, entry) => sum + calculateEntryDiscount(entry), 0);
+    }
+
+    function calculateFinanceSummary(entries) {
+        const profileConfig = getCurrentProfileConfig();
+        const todayStr = new Date().toISOString().split('T')[0];
+        const todayEntry = (entries || []).find(ent => ent.date === todayStr);
+        const dayDiscount = todayEntry ? calculateEntryDiscount(todayEntry) : 0;
+        const monthDiscount = calculateMonthlyDiscount(entries || []);
+        const netSalary = profileConfig.salario - monthDiscount;
+
+        return {
+            salary: profileConfig.salario,
+            dayDiscount,
+            monthDiscount,
+            netSalary
+        };
+    }
+
+    function renderFinanceSummary() {
+        const summary = calculateFinanceSummary(currentUser?.entries || []);
+        if (financeSalaryValue) financeSalaryValue.textContent = FinanceHelpers ? FinanceHelpers.formatCurrencyBRL(summary.salary) : 'R$ 0,00';
+        if (financeDayDiscount) financeDayDiscount.textContent = FinanceHelpers ? FinanceHelpers.formatCurrencyBRL(summary.dayDiscount) : 'R$ 0,00';
+        if (financeMonthDiscount) financeMonthDiscount.textContent = FinanceHelpers ? FinanceHelpers.formatCurrencyBRL(summary.monthDiscount) : 'R$ 0,00';
+        if (financeNetSalary) financeNetSalary.textContent = FinanceHelpers ? FinanceHelpers.formatCurrencyBRL(summary.netSalary) : 'R$ 0,00';
+        setProfileWarningVisibility();
     }
 
     // ================= SECURITY: CRYPTOGRAPHIC PASSWORD HASHING =================
@@ -424,8 +559,7 @@ async function carregarPontosDoSupabase() {
         e.preventDefault();
         formLogin.classList.add('hidden');
         formRegister.classList.remove('hidden');
-
-    });;
+    });
     linkGoToLogin.addEventListener('click', (e) => {
         e.preventDefault();
         formRegister.classList.add('hidden');
@@ -446,6 +580,62 @@ async function carregarPontosDoSupabase() {
             }, 1000);
         });
     }
+
+    formProfile.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const salary = Number(profileSalaryInput.value);
+        const workloadSelection = profileWorkloadSelect.value;
+        let cargaHorariaMensal = 0;
+
+        if (!profileSalaryInput.value || Number.isNaN(salary) || salary <= 0) {
+            showToast('Informe um salário válido.', 'error');
+            return;
+        }
+
+        if (!workloadSelection) {
+            showToast('Selecione a carga horária mensal.', 'error');
+            return;
+        }
+
+        if (workloadSelection === 'custom') {
+            cargaHorariaMensal = Number(profileCustomWorkloadInput.value);
+            if (!profileCustomWorkloadInput.value || Number.isNaN(cargaHorariaMensal) || cargaHorariaMensal <= 0) {
+                showToast('Informe uma carga horária personalizada válida.', 'error');
+                return;
+            }
+        } else {
+            cargaHorariaMensal = Number(workloadSelection);
+        }
+
+        try {
+            await salvarPerfilNoSupabase({
+                salario: salary,
+                carga_horaria_mensal: cargaHorariaMensal
+            });
+            renderFinanceSummary();
+            updateDashboardData();
+            renderHistoryTable();
+            showToast('Perfil salvo com sucesso.', 'success');
+        } catch (err) {
+            console.error('Erro ao salvar perfil:', err);
+            showToast('Erro ao salvar perfil: ' + err.message, 'error');
+        }
+    });
+
+    profileWorkloadSelect.addEventListener('change', () => {
+        if (profileWorkloadSelect.value === 'custom') {
+            profileCustomWorkloadGroup.classList.remove('hidden');
+        } else {
+            profileCustomWorkloadGroup.classList.add('hidden');
+            profileCustomWorkloadInput.value = '';
+        }
+    });
+
+    btnGoProfileFromDashboard.addEventListener('click', () => {
+        switchPanel('panel-profile');
+        updateProfileForm();
+    });
 
     // Handle Register Submit
     formRegister.addEventListener('submit', async (e) => {
@@ -616,6 +806,12 @@ showDashboard();
                 headerPanelTitle.textContent = 'Painel Geral';
                 headerPanelSubtitle.textContent = 'Resumo geral do seu saldo e horas trabalhadas.';
                 updateDashboardData();
+                renderFinanceSummary();
+                break;
+            case 'panel-profile':
+                headerPanelTitle.textContent = 'Perfil';
+                headerPanelSubtitle.textContent = 'Gerencie seu salário e sua carga horária.';
+                updateProfileForm();
                 break;
             case 'panel-register':
                 headerPanelTitle.textContent = 'Registrar Ponto';
@@ -973,6 +1169,15 @@ showDashboard();
         // Difference stats
         const diff = weekMetrics.diffMinutes;
         statHoursDiff.textContent = formatBalance(diff);
+
+        const monthlyRequirementValue = currentUser?.cargaHorariaMensal;
+        if (statMonthlyRequirement) {
+            if (monthlyRequirementValue && Number(monthlyRequirementValue) > 0) {
+                statMonthlyRequirement.textContent = `${Number(monthlyRequirementValue)}h`;
+            } else {
+                statMonthlyRequirement.textContent = '--';
+            }
+        }
         
         // Remove prior colors
         statHoursDiff.classList.remove('text-success', 'text-danger');
@@ -1016,100 +1221,6 @@ showDashboard();
             statDiffIconContainer.appendChild(svgArrowDown);
         }
 
-        // 3. Workload Tracking Calculations
-        
-        // --- Daily Progress ---
-        const dailyWorkedMinutes = todayEntry ? calculateWorkedMinutes(todayEntry) : 0;
-        const dailyRequiredMinutes = getDailyTargetMinutes(todayStr, currentUser.contractType);
-        const isTodayHoliday = Boolean(holidayName);
-        const isTodayReleased = Boolean(todayEntry?.liberacaoEmpresa);
-        const effectiveDailyRequiredMinutes = isTodayReleased ? dailyRequiredMinutes : dailyRequiredMinutes;
-        
-        // Calculate daily percentage
-        const dailyPercentage = effectiveDailyRequiredMinutes === 0 ? 100 : Math.min(100, Math.round((dailyWorkedMinutes / effectiveDailyRequiredMinutes) * 100));
-        
-        // Update daily elements
-        trackingDailySubtitle.textContent = isTodayHoliday ? `Feriado • ${holidayName}` : isTodayReleased ? 'Liberação da Empresa' : `Meta: ${dailyRequiredMinutes / 60}h`;
-        progressDailyFill.style.width = `${effectiveDailyRequiredMinutes === 0 ? 100 : dailyPercentage}%`;
-        progressDailyPercentage.textContent = isTodayHoliday ? 'Feriado' : isTodayReleased ? 'Concluído' : `${dailyPercentage}%`;
-        
-        // Remove prior alert classes
-        alertDailyBox.classList.remove('alert-warning', 'alert-success', 'alert-danger');
-        
-        if (isTodayHoliday) {
-            alertDailyBox.classList.add('alert-success');
-            alertDailyIcon.textContent = '✅';
-            alertDailyText.textContent = 'Feriado: a jornada diária não gera obrigação de horas.';
-        } else if (isTodayReleased) {
-            alertDailyBox.classList.add('alert-success');
-            alertDailyIcon.textContent = '🏢';
-            alertDailyText.textContent = 'Dia liberado pela empresa: a jornada é considerada concluída.';
-        } else if (dailyWorkedMinutes >= dailyRequiredMinutes) {
-            alertDailyBox.classList.add('alert-success');
-            alertDailyIcon.textContent = '✅';
-            alertDailyText.textContent = 'Você concluiu sua carga horária do dia.';
-        } else if (todayEntry && todaySummary.tone === 'negative') {
-            alertDailyBox.classList.add('alert-danger');
-            alertDailyIcon.textContent = '⚠️';
-            alertDailyText.textContent = todaySummary.detail;
-        } else {
-            alertDailyBox.classList.add('alert-warning');
-            alertDailyIcon.textContent = '⚠️';
-            const remainingDailyMinutes = dailyRequiredMinutes - dailyWorkedMinutes;
-            alertDailyText.textContent = todayEntry
-                ? `Faltam ${minutesToHoursString(remainingDailyMinutes)} para completar sua jornada diária.`
-                : 'Ainda não há registro para hoje. Registre seu ponto para acompanhar a meta diária.';
-        }
-
-        if (todayEntry) {
-            const entrySummary = getDailyBalanceSummary(todayEntry);
-            dailyMarkingsContent.innerHTML = `<strong>${entrySummary.label}</strong><br>${entrySummary.detail}`;
-            if (todayEntry.justificativa) {
-                observationCard.classList.remove('hidden');
-                observationContent.innerHTML = `<strong>Motivo:</strong> ${todayEntry.motivo || 'Não informado'}<br><br><strong>Justificativa:</strong> ${todayEntry.justificativa}`;
-            } else if (todayEntry.liberacaoEmpresa) {
-                observationCard.classList.remove('hidden');
-                observationContent.innerHTML = '<strong>Motivo:</strong> Liberação da Empresa';
-            } else {
-                observationCard.classList.add('hidden');
-            }
-        } else if (isTodayHoliday) {
-            dailyMarkingsContent.textContent = `Não houveram marcações neste dia. ${holidayName ? `(${holidayName})` : ''}`.trim();
-            observationCard.classList.add('hidden');
-        } else {
-            dailyMarkingsContent.textContent = 'Não houveram marcações neste dia.';
-            observationCard.classList.add('hidden');
-        }
-        
-        // --- Weekly Progress ---
-        const weeklyWorkedMinutes = weekMetrics.workedMinutes;
-        const weeklyRequiredMinutes = config.weeklyRequiredMinutes;
-        
-        // Calculate weekly percentage
-        const weeklyPercentage = Math.min(100, Math.round((weeklyWorkedMinutes / weeklyRequiredMinutes) * 100));
-        
-        // Update weekly elements
-        trackingWeeklySubtitle.textContent = `Meta: ${weeklyRequiredMinutes / 60}h`;
-        progressWeeklyFill.style.width = `${weeklyPercentage}%`;
-        progressWeeklyPercentage.textContent = `${weeklyPercentage}%`;
-        
-        // Remove prior alert classes
-        alertWeeklyBox.classList.remove('alert-warning', 'alert-success', 'alert-danger');
-        
-        if (weeklyWorkedMinutes >= weeklyRequiredMinutes) {
-            alertWeeklyBox.classList.add('alert-success');
-            alertWeeklyIcon.textContent = '✅';
-            alertWeeklyText.textContent = 'Você concluiu sua carga horária da semana.';
-        } else if (balance < 0) {
-            alertWeeklyBox.classList.add('alert-danger');
-            alertWeeklyIcon.textContent = '⚠️';
-            alertWeeklyText.textContent = `Você ainda precisa compensar ${minutesToHoursString(Math.abs(balance))} para fechar a semana.`;
-        } else {
-            alertWeeklyBox.classList.add('alert-warning');
-            alertWeeklyIcon.textContent = '⚠️';
-            const remainingWeeklyMinutes = weeklyRequiredMinutes - weeklyWorkedMinutes;
-            alertWeeklyText.textContent = `Faltam ${minutesToHoursString(remainingWeeklyMinutes)} para completar sua jornada semanal.`;
-        }
     }
 
     function formatBalance(minutes) {
@@ -1240,6 +1351,7 @@ formRegisterHours.addEventListener('submit', async (e) => {
     setCurrentSession(currentUser);
 
     updateDashboardData();
+    renderFinanceSummary();
     renderHistoryTable();
 
     showToast("Novo registro de ponto salvo com sucesso.", "success");
@@ -1309,6 +1421,7 @@ formRegisterHours.addEventListener('submit', async (e) => {
         currentUser.entries.push(novoRegistroLocal);
         setCurrentSession(currentUser);
         updateDashboardData();
+        renderFinanceSummary();
         renderHistoryTable();
         showToast("Registro salvo sem justificativa.", "info");
         resetJustificativaForm();
@@ -1496,6 +1609,12 @@ formRegisterHours.addEventListener('submit', async (e) => {
             tdWorked.appendChild(valueWrap);
             tr.appendChild(tdWorked);
 
+            // Discount column
+            const tdDiscount = document.createElement('td');
+            const discountValue = calculateEntryDiscount(entry);
+            tdDiscount.textContent = FinanceHelpers ? FinanceHelpers.formatCurrencyBRL(discountValue) : 'R$ 0,00';
+            tr.appendChild(tdDiscount);
+
             // Observation column
             const tdObservation = document.createElement('td');
             const btnViewObservation = document.createElement('button');
@@ -1570,6 +1689,7 @@ formRegisterHours.addEventListener('submit', async (e) => {
 
         await carregarPontosDoSupabase();
         updateDashboardData();
+        renderFinanceSummary();
         renderHistoryTable();
 
         const userKey = currentUser.name.toLowerCase().replace(/\s+/g, '_');
