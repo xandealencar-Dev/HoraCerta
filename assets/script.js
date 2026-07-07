@@ -351,18 +351,29 @@ async function carregarPontosDoSupabase() {
             throw new Error('Usuário não autenticado.');
         }
 
+        const salario = Number(payload.salario);
+        const carga_horaria_mensal = Number(payload.carga_horaria_mensal);
+
+        console.log({
+            salario,
+            carga_horaria_mensal
+        });
+
         const perfilParaPersistir = {
-            salario: Number(payload.salario) || 0,
-            carga_horaria_mensal: Number(payload.carga_horaria_mensal) || 0
+            salario: Number.isFinite(salario) ? salario : 0,
+            carga_horaria_mensal: Number.isInteger(carga_horaria_mensal) ? carga_horaria_mensal : 0
         };
 
         const { data, error } = await supabaseClient
             .from('usuarios')
             .update(perfilParaPersistir)
             .eq('id', currentUser.id)
-            .select('id');
+            .select('id, salario, carga_horaria_mensal');
+
+        console.log('Resposta do Supabase ao salvar perfil:', { data, error });
 
         if (error) {
+            console.error('Erro completo do Supabase ao salvar perfil:', error);
             throw error;
         }
 
@@ -619,6 +630,11 @@ async function carregarPontosDoSupabase() {
         }
 
         try {
+            console.log('Valores capturados do formulário:', {
+                salario: salary,
+                carga_horaria_mensal: cargaHorariaMensal
+            });
+
             await salvarPerfilNoSupabase({
                 salario: salary,
                 carga_horaria_mensal: cargaHorariaMensal
