@@ -338,8 +338,8 @@ async function carregarPontosDoSupabase() {
         }
 
         if (data) {
-            currentUser.salario = data.salario;
-            currentUser.cargaHorariaMensal = data.carga_horaria_mensal;
+            currentUser.salario = data.salario ?? currentUser.salario ?? 0;
+            currentUser.cargaHorariaMensal = data.carga_horaria_mensal ?? currentUser.cargaHorariaMensal ?? 0;
             setCurrentSession(currentUser);
         }
 
@@ -351,17 +351,22 @@ async function carregarPontosDoSupabase() {
             throw new Error('Usuário não autenticado.');
         }
 
+        const perfilParaPersistir = {
+            id: currentUser.id,
+            salario: Number(payload.salario) || 0,
+            carga_horaria_mensal: Number(payload.carga_horaria_mensal) || 0
+        };
+
         const { error } = await supabaseClient
             .from('usuarios')
-            .update(payload)
-            .eq('id', currentUser.id);
+            .upsert(perfilParaPersistir, { onConflict: 'id' });
 
         if (error) {
             throw error;
         }
 
-        currentUser.salario = payload.salario;
-        currentUser.cargaHorariaMensal = payload.carga_horaria_mensal;
+        currentUser.salario = perfilParaPersistir.salario;
+        currentUser.cargaHorariaMensal = perfilParaPersistir.carga_horaria_mensal;
         setCurrentSession(currentUser);
     }
 
