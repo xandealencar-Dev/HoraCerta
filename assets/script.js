@@ -356,13 +356,18 @@ async function carregarPontosDoSupabase() {
             carga_horaria_mensal: Number(payload.carga_horaria_mensal) || 0
         };
 
-        const { error } = await supabaseClient
+        const { data, error } = await supabaseClient
             .from('usuarios')
             .update(perfilParaPersistir)
-            .eq('id', currentUser.id);
+            .eq('id', currentUser.id)
+            .select('id');
 
         if (error) {
             throw error;
+        }
+
+        if (!data || data.length === 0) {
+            throw new Error('Não foi possível atualizar o perfil do usuário.');
         }
 
         currentUser.salario = perfilParaPersistir.salario;
