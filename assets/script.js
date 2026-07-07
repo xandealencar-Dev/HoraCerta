@@ -353,8 +353,12 @@ async function carregarPontosDoSupabase() {
 
         const salario = Number(payload.salario);
         const carga_horaria_mensal = Number(payload.carga_horaria_mensal);
+        const usuarioId = currentUser.id;
 
-        console.log({
+        console.log('Salário:', salario);
+        console.log('Carga horária:', carga_horaria_mensal);
+        console.log('Usuário ID usado no update:', usuarioId);
+        console.log('Payload enviado ao Supabase:', {
             salario,
             carga_horaria_mensal
         });
@@ -367,7 +371,7 @@ async function carregarPontosDoSupabase() {
         const { data, error } = await supabaseClient
             .from('usuarios')
             .update(perfilParaPersistir)
-            .eq('id', currentUser.id)
+            .eq('id', usuarioId)
             .select('id, salario, carga_horaria_mensal');
 
         console.log('Resposta do Supabase ao salvar perfil:', { data, error });
