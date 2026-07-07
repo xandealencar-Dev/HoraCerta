@@ -123,8 +123,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
         headerDate.textContent = new Date().toLocaleDateString('pt-BR', options);
         
-        // Set default date picker to today
-        const todayStr = new Date().toISOString().split('T')[0];
+        // Set default date picker to today using local date to avoid timezone shifts
+        const todayStr = formatDateString(new Date());
         pointDateInput.value = todayStr;
         
         // Router check
@@ -978,16 +978,16 @@ showDashboard();
      * ISO week identifier (YYYY-Www) to group history points into calendar weeks.
      */
     function getWeekIdentifier(dateString) {
-        const date = new Date(dateString + 'T00:00:00');
-        const tempDate = new Date(date.valueOf());
-        // Set to nearest Thursday: current date + 4 - current day number
-        // Make Sunday's day number 7
+        const date = new Date(dateString);
+        if (Number.isNaN(date.getTime())) {
+            return null;
+        }
+
+        const tempDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
         tempDate.setDate(tempDate.getDate() + 4 - (tempDate.getDay() || 7));
         const UTCyear = tempDate.getFullYear();
-        // Get first day of school year
         const firstThursday = new Date(UTCyear, 0, 4);
         firstThursday.setDate(firstThursday.getDate() + 4 - (firstThursday.getDay() || 7));
-        // Calculate weeks between first Thursday and nearest Thursday
         const weekNumber = 1 + Math.ceil((tempDate - firstThursday) / 604800000);
         return `${UTCyear}-W${weekNumber.toString().padStart(2, '0')}`;
     }
@@ -1065,7 +1065,11 @@ showDashboard();
             };
         }
 
-        const sortedEntries = [...currentUser.entries].sort((a, b) => new Date(a.date) - new Date(b.date));
+        const sortedEntries = [...currentUser.entries].sort((a, b) => {
+            const dateA = new Date(a.date);
+            const dateB = new Date(b.date);
+            return dateA - dateB;
+        });
         
         // Find all unique weeks present in user entries
         const uniqueWeeks = new Set();
@@ -1108,7 +1112,7 @@ showDashboard();
      * Computes statistics for the current active week (if entries exist).
      */
     function computeCurrentWeekMetrics(weeksMap) {
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = formatDateString(new Date());
         const currentWeekId = getWeekIdentifier(todayStr);
         const config = getContractConfig(currentUser.contractType);
         
@@ -1136,7 +1140,7 @@ showDashboard();
         // 1. Balance Main Display Card
         const balance = metrics.netBalanceMinutes;
         const formattedBalance = formatBalance(balance);
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = formatDateString(new Date());
         const todayEntry = (currentUser.entries || []).find(ent => ent.date === todayStr);
         const todaySummary = todayEntry ? getDailyBalanceSummary(todayEntry) : {
             tone: 'warning',
@@ -1471,7 +1475,7 @@ formRegisterHours.addEventListener('submit', async (e) => {
         const endDate = new Date(year, month - 1, 25);
         const startDate = new Date(year, month - 2, 26);
 
-        const toIso = date => date.toISOString().split('T')[0];
+        const toIso = date => formatDateString(date);
         return {
             start: toIso(startDate),
             end: toIso(endDate)
