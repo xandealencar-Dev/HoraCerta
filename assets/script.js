@@ -352,14 +352,14 @@ async function carregarPontosDoSupabase() {
         }
 
         const perfilParaPersistir = {
-            id: currentUser.id,
             salario: Number(payload.salario) || 0,
             carga_horaria_mensal: Number(payload.carga_horaria_mensal) || 0
         };
 
         const { error } = await supabaseClient
             .from('usuarios')
-            .upsert(perfilParaPersistir, { onConflict: 'id' });
+            .update(perfilParaPersistir)
+            .eq('id', currentUser.id);
 
         if (error) {
             throw error;
