@@ -733,6 +733,71 @@ button, .btn {
     pointer-events: none;
 }
 
+.monthly-progress-card {
+    margin-top: 16px;
+    padding: 16px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    position: relative;
+    z-index: 2;
+}
+
+.monthly-progress-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.92rem;
+    margin-bottom: 8px;
+}
+
+.monthly-progress-label {
+    color: rgba(255,255,255,0.8);
+}
+
+.monthly-progress-value {
+    font-weight: 600;
+}
+
+.monthly-progress-bar {
+    width: 100%;
+    height: 10px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.22);
+    overflow: hidden;
+    margin: 8px 0 10px;
+}
+
+.monthly-progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #ffffff, #dbeafe);
+    transition: width 0.3s ease;
+}
+
+.monthly-progress-text {
+    font-size: 0.92rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.monthly-progress-detail {
+    font-size: 0.82rem;
+    color: rgba(255,255,255,0.8);
+}
+
+.folha-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin: 20px 0;
+}
+
+.folha-history-card {
+    margin-top: 12px;
+    border-top: 1px solid var(--color-border);
+    padding-top: 20px;
+}
+
 /* Stats grid layout */
 .stats-grid {
     display: grid;

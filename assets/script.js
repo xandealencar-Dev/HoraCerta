@@ -60,6 +60,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const balanceValueDisplay = document.getElementById('balance-value-display');
     const balanceMessageText = document.getElementById('balance-message-text');
     const balanceMetaText = document.getElementById('balance-meta-text');
+    const monthlyWorkloadValue = document.getElementById('monthly-workload-value');
+    const monthlyWorkedValue = document.getElementById('monthly-worked-value');
+    const monthlyRemainingValue = document.getElementById('monthly-remaining-value');
+    const monthlyProgressFill = document.getElementById('monthly-progress-fill');
+    const monthlyProgressText = document.getElementById('monthly-progress-text');
+    const monthlyProgressDetail = document.getElementById('monthly-progress-detail');
     const statContractType = document.getElementById('stat-contract-type');
     const statHoursRequired = document.getElementById('stat-hours-required');
     const statHoursRequiredDaily = document.getElementById('stat-hours-required-daily');
@@ -101,6 +107,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const financeDayDiscount = document.getElementById('finance-day-discount');
     const financeMonthDiscount = document.getElementById('finance-month-discount');
     const financeNetSalary = document.getElementById('finance-net-salary');
+    const btnDownloadPdf = document.getElementById('btn-download-pdf');
+    const folhaPeriod = document.getElementById('folha-period');
+    const folhaExpected = document.getElementById('folha-expected');
+    const folhaWorked = document.getElementById('folha-worked');
+    const folhaRemaining = document.getElementById('folha-remaining');
+    const folhaBalance = document.getElementById('folha-balance');
+    const folhaOvertime = document.getElementById('folha-overtime');
+    const folhaDelays = document.getElementById('folha-delays');
+    const folhaEarlyExits = document.getElementById('folha-early-exits');
+    const folhaAbsences = document.getElementById('folha-absences');
+    const folhaDiscount = document.getElementById('folha-discount');
+    const folhaSalary = document.getElementById('folha-salary');
+    const folhaNetSalary = document.getElementById('folha-net-salary');
+    const tableBodyFolha = document.getElementById('table-body-folha');
+    const folhaEmptyMessage = document.getElementById('folha-empty-message');
     const formProfile = document.getElementById('form-profile');
     const profileSalaryInput = document.getElementById('profile-salary');
     const profileWorkloadSelect = document.getElementById('profile-workload');
@@ -852,6 +873,11 @@ showDashboard();
                 headerPanelSubtitle.textContent = 'Consulte e filtre todos os seus horários registrados.';
                 renderHistoryTable();
                 break;
+            case 'panel-folha':
+                headerPanelTitle.textContent = 'Fechamento da Folha';
+                headerPanelSubtitle.textContent = 'Acompanhe o período 25→25 com carga horária, saldo e registros.';
+                renderFolhaPanel();
+                break;
             case 'panel-charts':
                 headerPanelTitle.textContent = 'Desempenho';
                 headerPanelSubtitle.textContent = 'Acompanhe graficamente a evolução do seu saldo de horas.';
@@ -864,6 +890,10 @@ showDashboard();
     btnEmptyStateGoRegister.addEventListener('click', () => {
         switchPanel('panel-register');
     });
+
+    if (btnDownloadPdf) {
+        btnDownloadPdf.addEventListener('click', downloadMonthlyReportPdf);
+    }
 
     // ================= CORE CALCULATIONS & STATS =================
     
@@ -1153,10 +1183,34 @@ showDashboard();
         return monthlyHours > 0 ? monthlyHours * 60 : 0;
     }
 
+    function getCurrentFolhaRange() {
+        const todayStr = formatDateString(new Date());
+        const [year, month, day] = todayStr.split('-').map(Number);
+        const currentDate = new Date(year, month - 1, day);
+
+        let startDate;
+        let endDate;
+
+        if (day < 25) {
+            startDate = new Date(year, month - 2, 25);
+            endDate = new Date(year, month - 1, 25);
+        } else {
+            startDate = new Date(year, month - 1, 25);
+            endDate = new Date(year, month, 25);
+        }
+
+        return {
+            start: formatDateString(startDate),
+            end: formatDateString(endDate)
+        };
+    }
+
     function computeMonthlyBalanceMetrics(entries = currentUser?.entries || []) {
-        const currentCompetenceId = getCompetenceIdentifierFromDate(formatDateString(new Date()));
-        const competenceEntries = getEntriesForCompetence([...entries], currentCompetenceId);
-        const totalWorkedMinutes = competenceEntries.reduce((sum, entry) => sum + calculateWorkedMinutes(entry), 0);
+        const range = getCurrentFolhaRange();
+        const periodEntries = range
+            ? [...entries].filter(entry => entry.date >= range.start && entry.date <= range.end)
+            : [...entries];
+        const totalWorkedMinutes = periodEntries.reduce((sum, entry) => sum + calculateWorkedMinutes(entry), 0);
         const monthlyRequiredMinutes = getExpectedMonthlyMinutes();
         const netBalanceMinutes = monthlyRequiredMinutes > 0 ? totalWorkedMinutes - monthlyRequiredMinutes : 0;
 
@@ -1164,8 +1218,290 @@ showDashboard();
             totalWorkedMinutes,
             monthlyRequiredMinutes,
             netBalanceMinutes,
-            entries: competenceEntries
+            entries: periodEntries
         };
+    }
+
+    function computeFolhaMetrics(entries = currentUser?.entries || []) {
+        const range = getCurrentFolhaRange();
+        const periodEntries = range
+            ? [...entries].filter(entry => entry.date >= range.start && entry.date <= range.end)
+            : [...entries];
+
+        const totalWorkedMinutes = periodEntries.reduce((sum, entry) => sum + calculateWorkedMinutes(entry), 0);
+        const expectedMinutes = getExpectedMonthlyMinutes();
+        const remainingMinutes = Math.max(0, expectedMinutes - totalWorkedMinutes);
+        const balanceMinutes = totalWorkedMinutes - expectedMinutes;
+        const overtimeMinutes = Math.max(0, balanceMinutes);
+
+        const delays = periodEntries.filter(entry => {
+            const motivo = (entry.motivo || '').toLowerCase();
+            return calculateWorkedMinutes(entry) < getDailyTargetMinutes(entry.date, currentUser?.contractType || 'CLT') && timeToMinutes(entry.entry) > 8 * 60 && !motivo.includes('falta');
+        }).length;
+
+        const earlyExits = periodEntries.filter(entry => {
+            const motivo = (entry.motivo || '').toLowerCase();
+            return motivo.includes('saída antecipada');
+        }).length;
+
+        const absences = periodEntries.filter(entry => {
+            const motivo = (entry.motivo || '').toLowerCase();
+            return motivo.includes('falta');
+        }).length;
+
+        const discount = periodEntries.reduce((sum, entry) => sum + calculateEntryDiscount(entry), 0);
+        const salary = Number(currentUser?.salario) || 0;
+        const netSalary = salary - discount;
+
+        return {
+            range,
+            entries: periodEntries,
+            expectedMinutes,
+            totalWorkedMinutes,
+            remainingMinutes,
+            balanceMinutes,
+            overtimeMinutes,
+            delays,
+            earlyExits,
+            absences,
+            discount,
+            salary,
+            netSalary
+        };
+    }
+
+    function renderMonthlyProgressCard(metrics) {
+        if (!monthlyWorkloadValue || !monthlyWorkedValue || !monthlyRemainingValue || !monthlyProgressFill || !monthlyProgressText || !monthlyProgressDetail) {
+            return;
+        }
+
+        const expectedMinutes = metrics.expectedMinutes || 0;
+        const workedMinutes = metrics.totalWorkedMinutes || 0;
+        const remainingMinutes = metrics.remainingMinutes || 0;
+        const overtimeMinutes = metrics.overtimeMinutes || 0;
+        const percentage = expectedMinutes > 0 ? Math.min(100, Math.round((workedMinutes / expectedMinutes) * 100)) : 0;
+
+        monthlyWorkloadValue.textContent = expectedMinutes > 0 ? `${minutesToHoursString(expectedMinutes)}` : '--';
+        monthlyWorkedValue.textContent = workedMinutes > 0 ? `${minutesToHoursString(workedMinutes)}` : '0h 00min';
+        monthlyRemainingValue.textContent = overtimeMinutes > 0 ? '0h 00min' : remainingMinutes > 0 ? minutesToHoursString(remainingMinutes) : '0h 00min';
+        monthlyProgressFill.style.width = `${percentage}%`;
+
+        if (overtimeMinutes > 0) {
+            monthlyProgressText.textContent = `${minutesToHoursString(workedMinutes)} de ${minutesToHoursString(expectedMinutes)} concluídas`;
+            monthlyProgressDetail.textContent = `${minutesToHoursString(overtimeMinutes)} excedentes`;
+        } else if (expectedMinutes > 0) {
+            monthlyProgressText.textContent = `${minutesToHoursString(workedMinutes)} de ${minutesToHoursString(expectedMinutes)} concluídas`;
+            monthlyProgressDetail.textContent = `${minutesToHoursString(remainingMinutes)} restantes`;
+        } else {
+            monthlyProgressText.textContent = 'Cadastre sua carga horária mensal para acompanhar o progresso.';
+            monthlyProgressDetail.textContent = 'Acompanhe quanto do período 25→25 já foi concluído.';
+        }
+    }
+
+    function renderFolhaPanel() {
+        if (!currentUser) {
+            return;
+        }
+
+        const metrics = computeFolhaMetrics(currentUser?.entries || []);
+        if (folhaPeriod) {
+            folhaPeriod.textContent = metrics.range ? `${metrics.range.start.split('-').reverse().join('/')} até ${metrics.range.end.split('-').reverse().join('/')}` : '--';
+        }
+        if (folhaExpected) {
+            folhaExpected.textContent = metrics.expectedMinutes > 0 ? `${minutesToHoursString(metrics.expectedMinutes)}` : '--';
+        }
+        if (folhaWorked) {
+            folhaWorked.textContent = metrics.totalWorkedMinutes > 0 ? `${minutesToHoursString(metrics.totalWorkedMinutes)}` : '0h 00min';
+        }
+        if (folhaRemaining) {
+            folhaRemaining.textContent = metrics.remainingMinutes > 0 ? `${minutesToHoursString(metrics.remainingMinutes)}` : '0h 00min';
+        }
+        if (folhaBalance) {
+            folhaBalance.textContent = metrics.balanceMinutes >= 0 ? `+${minutesToHoursString(metrics.balanceMinutes)}` : `${minutesToHoursString(metrics.balanceMinutes)}`;
+        }
+        if (folhaOvertime) {
+            folhaOvertime.textContent = metrics.overtimeMinutes > 0 ? `${minutesToHoursString(metrics.overtimeMinutes)}` : '0h 00min';
+        }
+        if (folhaDelays) {
+            folhaDelays.textContent = metrics.delays;
+        }
+        if (folhaEarlyExits) {
+            folhaEarlyExits.textContent = metrics.earlyExits;
+        }
+        if (folhaAbsences) {
+            folhaAbsences.textContent = metrics.absences;
+        }
+        if (folhaDiscount) {
+            folhaDiscount.textContent = FinanceHelpers ? FinanceHelpers.formatCurrencyBRL(metrics.discount) : 'R$ 0,00';
+        }
+        if (folhaSalary) {
+            folhaSalary.textContent = FinanceHelpers ? FinanceHelpers.formatCurrencyBRL(metrics.salary) : 'R$ 0,00';
+        }
+        if (folhaNetSalary) {
+            folhaNetSalary.textContent = FinanceHelpers ? FinanceHelpers.formatCurrencyBRL(metrics.netSalary) : 'R$ 0,00';
+        }
+
+        if (tableBodyFolha) {
+            tableBodyFolha.replaceChildren();
+        }
+
+        if (!metrics.entries.length) {
+            if (folhaEmptyMessage) {
+                folhaEmptyMessage.classList.remove('hidden');
+            }
+            return;
+        }
+
+        if (folhaEmptyMessage) {
+            folhaEmptyMessage.classList.add('hidden');
+        }
+
+        metrics.entries.forEach(entry => {
+            const tr = document.createElement('tr');
+            const tdDate = document.createElement('td');
+            tdDate.textContent = entry.date.split('-').reverse().join('/');
+            tr.appendChild(tdDate);
+
+            const tdEntry = document.createElement('td');
+            tdEntry.textContent = entry.entry;
+            tr.appendChild(tdEntry);
+
+            const tdLunchOut = document.createElement('td');
+            tdLunchOut.textContent = entry.lunchOut;
+            tr.appendChild(tdLunchOut);
+
+            const tdLunchReturn = document.createElement('td');
+            tdLunchReturn.textContent = entry.lunchReturn;
+            tr.appendChild(tdLunchReturn);
+
+            const tdExit = document.createElement('td');
+            tdExit.textContent = entry.exit;
+            tr.appendChild(tdExit);
+
+            const tdWorked = document.createElement('td');
+            tdWorked.textContent = minutesToHoursString(calculateWorkedMinutes(entry));
+            tr.appendChild(tdWorked);
+
+            const tdMotivo = document.createElement('td');
+            tdMotivo.textContent = entry.motivo || '—';
+            tr.appendChild(tdMotivo);
+
+            tableBodyFolha.appendChild(tr);
+        });
+    }
+
+    function downloadMonthlyReportPdf() {
+        if (!currentUser) {
+            showToast('Faça login para gerar o relatório.', 'error');
+            return;
+        }
+
+        const metrics = computeFolhaMetrics(currentUser?.entries || []);
+        if (!metrics.entries.length) {
+            showToast('Nenhum registro encontrado para gerar o relatório.', 'info');
+            return;
+        }
+
+        if (!window.jspdf || !window.jspdf.jsPDF) {
+            showToast('Não foi possível carregar o motor de PDF no momento.', 'error');
+            return;
+        }
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        let y = 40;
+
+        doc.setFillColor(59, 130, 246);
+        doc.rect(40, 20, pageWidth - 80, 40, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(18);
+        doc.text('Relatório Mensal de Ponto', 56, 48);
+        doc.setFontSize(10);
+        doc.text('HoraCerta - Acompanhamento da folha', 56, 66);
+
+        doc.setTextColor(30, 41, 59);
+        doc.setFontSize(11);
+        doc.text(`Funcionário: ${currentUser.name || 'Usuário'}`, 56, 96);
+        doc.text(`Período: ${metrics.range ? `${metrics.range.start.split('-').reverse().join('/')} até ${metrics.range.end.split('-').reverse().join('/')}` : '--'}`, 56, 114);
+        doc.text(`Emitido em: ${new Date().toLocaleString('pt-BR')}`, 56, 132);
+
+        doc.setDrawColor(226, 232, 240);
+        doc.line(56, 148, pageWidth - 56, 148);
+
+        const summaryItems = [
+            [`Carga horária prevista`, `${minutesToHoursString(metrics.expectedMinutes)}`],
+            [`Horas trabalhadas`, `${minutesToHoursString(metrics.totalWorkedMinutes)}`],
+            [`Horas restantes`, `${minutesToHoursString(metrics.remainingMinutes)}`],
+            [`Saldo do período`, `${metrics.balanceMinutes >= 0 ? '+' : ''}${minutesToHoursString(metrics.balanceMinutes)}`],
+            [`Horas extras`, `${minutesToHoursString(metrics.overtimeMinutes)}`],
+            [`Atrasos`, `${metrics.delays}`],
+            [`Saídas antecipadas`, `${metrics.earlyExits}`],
+            [`Faltas`, `${metrics.absences}`],
+            [`Valor descontado`, FinanceHelpers ? FinanceHelpers.formatCurrencyBRL(metrics.discount) : 'R$ 0,00' ],
+            [`Salário informado`, FinanceHelpers ? FinanceHelpers.formatCurrencyBRL(metrics.salary) : 'R$ 0,00' ],
+            [`Salário líquido estimado`, FinanceHelpers ? FinanceHelpers.formatCurrencyBRL(metrics.netSalary) : 'R$ 0,00' ]
+        ];
+
+        y = 168;
+        summaryItems.forEach(([label, value]) => {
+            doc.setFontSize(10);
+            doc.setTextColor(100, 116, 139);
+            doc.text(label, 56, y);
+            doc.setTextColor(30, 41, 59);
+            doc.text(value, pageWidth - 56, y, { align: 'right' });
+            y += 16;
+        });
+
+        y += 8;
+        doc.line(56, y, pageWidth - 56, y);
+        y += 22;
+        doc.setFontSize(11);
+        doc.setTextColor(30, 41, 59);
+        doc.text('Registros de ponto do período', 56, y);
+        y += 16;
+
+        const rows = metrics.entries.map(entry => [
+            entry.date.split('-').reverse().join('/'),
+            entry.entry,
+            entry.lunchOut,
+            entry.lunchReturn,
+            entry.exit,
+            minutesToHoursString(calculateWorkedMinutes(entry)),
+            entry.motivo || '—'
+        ]);
+
+        const headers = ['Data', 'Entrada', 'Saída Almoço', 'Retorno', 'Saída', 'Horas', 'Motivo'];
+        const columnWidths = [70, 60, 70, 70, 60, 50, 90];
+        const startX = 56;
+        let currentY = y;
+        doc.setFontSize(9);
+        doc.setFillColor(248, 250, 252);
+        doc.rect(startX, currentY - 12, pageWidth - 112, 16, 'F');
+        headers.forEach((header, index) => {
+            doc.setTextColor(30, 41, 59);
+            doc.text(header, startX + columnWidths.slice(0, index).reduce((a, b) => a + b, 0) + 8, currentY - 2);
+        });
+        currentY += 8;
+
+        rows.forEach((row, rowIndex) => {
+            if (currentY > pageHeight - 70) {
+                doc.addPage();
+                currentY = 40;
+            }
+            const rowHeight = 14;
+            doc.setDrawColor(226, 232, 240);
+            doc.line(startX, currentY, pageWidth - 56, currentY);
+            row.forEach((value, index) => {
+                const x = startX + columnWidths.slice(0, index).reduce((a, b) => a + b, 0) + 8;
+                doc.setTextColor(51, 65, 85);
+                doc.text(String(value), x, currentY + rowHeight / 2 + 2, { maxWidth: columnWidths[index] - 8 });
+            });
+            currentY += rowHeight;
+        });
+
+        doc.save(`relatorio-folha-${(currentUser.name || 'usuario').toLowerCase().replace(/\s+/g, '-')}.pdf`);
     }
 
     // ================= PANEL UPDATES & RENDERING =================
@@ -1177,6 +1513,9 @@ showDashboard();
         const config = getContractConfig(currentUser.contractType);
         const monthlyBalanceMetrics = computeMonthlyBalanceMetrics(currentUser?.entries || []);
         
+        const monthlyProgressMetrics = computeFolhaMetrics(currentUser?.entries || []);
+        renderMonthlyProgressCard(monthlyProgressMetrics);
+
         // 1. Balance Main Display Card
         const balance = monthlyBalanceMetrics.netBalanceMinutes;
         const formattedBalance = formatBalance(balance);
