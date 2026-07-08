@@ -1148,17 +1148,37 @@ showDashboard();
         };
     }
 
+    function getExpectedMonthlyMinutes() {
+        const monthlyHours = Number(currentUser?.cargaHorariaMensal) || 0;
+        return monthlyHours > 0 ? monthlyHours * 60 : 0;
+    }
+
+    function computeMonthlyBalanceMetrics(entries = currentUser?.entries || []) {
+        const currentCompetenceId = getCompetenceIdentifierFromDate(formatDateString(new Date()));
+        const competenceEntries = getEntriesForCompetence([...entries], currentCompetenceId);
+        const totalWorkedMinutes = competenceEntries.reduce((sum, entry) => sum + calculateWorkedMinutes(entry), 0);
+        const monthlyRequiredMinutes = getExpectedMonthlyMinutes();
+        const netBalanceMinutes = monthlyRequiredMinutes > 0 ? totalWorkedMinutes - monthlyRequiredMinutes : 0;
+
+        return {
+            totalWorkedMinutes,
+            monthlyRequiredMinutes,
+            netBalanceMinutes,
+            entries: competenceEntries
+        };
+    }
+
     // ================= PANEL UPDATES & RENDERING =================
 
     /**
      * Updates all dashboard visual metrics cards.
      */
     function updateDashboardData() {
-        const metrics = computeOverallMetrics();
         const config = getContractConfig(currentUser.contractType);
+        const monthlyBalanceMetrics = computeMonthlyBalanceMetrics(currentUser?.entries || []);
         
         // 1. Balance Main Display Card
-        const balance = metrics.netBalanceMinutes;
+        const balance = monthlyBalanceMetrics.netBalanceMinutes;
         const formattedBalance = formatBalance(balance);
         const todayStr = formatDateString(new Date());
         const todayEntry = (currentUser.entries || []).find(ent => ent.date === todayStr);
