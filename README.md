@@ -217,10 +217,10 @@ Este projeto foi desenvolvido com o objetivo de aprimorar conhecimentos em desen
 **Alexandre Alencar**
 
 GitHub:
-https://github.com/SEU-USUARIO
+https://github.com/xandealencar-Dev
 
 LinkedIn:
-https://linkedin.com/in/SEU-LINK
+https://linkedin.com/in/carlosalexandre-alencar
 
 ---
 
