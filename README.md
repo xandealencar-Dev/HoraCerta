@@ -195,7 +195,7 @@ Todo o banco de horas e os relatórios são calculados utilizando esse intervalo
 
 ## 📈 Melhorias planejadas
 
-- [ ] Relatório mensal em PDF
+- [x] Relatório mensal em PDF
 - [ ] Exportação para Excel
 - [ ] Dashboard administrativo
 - [ ] Cadastro de empresas
