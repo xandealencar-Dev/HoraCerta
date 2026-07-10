@@ -112,7 +112,7 @@ Hora-Certa
 ### Clone o repositório
 
 ```bash
-git clone https://github.com/SEU-USUARIO/Hora-Certa.git
+git clone https://github.com/xandealencar-Dev/Hora-Certa.git
 ```
 
 Entre na pasta
