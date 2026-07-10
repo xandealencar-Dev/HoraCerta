@@ -143,8 +143,6 @@ Principais tabelas:
 
 - usuarios
 - registros_ponto
-- configuracoes *(caso exista)*
-- histórico *(caso exista)*
 
 ---
 
