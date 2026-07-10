@@ -1659,7 +1659,8 @@ showDashboard();
         statHoursRequiredDaily.textContent = `${config.dailyTargetMinutes / 60}h`;
 
         // Weekly current week details
-        const weekMetrics = computeCurrentWeekMetrics(metrics.weeksMap);
+        const overallMetrics = computeOverallMetrics();
+        const weekMetrics = computeCurrentWeekMetrics(overallMetrics.weeksMap);
         statHoursWorked.textContent = minutesToHoursString(weekMetrics.workedMinutes);
 
         // Difference stats
