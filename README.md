@@ -63,11 +63,10 @@ O projeto foi criado com foco em organização, usabilidade e precisão nos cál
 
 ### Front-end
 
-- HTML5
-- CSS3
+- HTML
+- CSS
 - JavaScript
-- React
-- Vite
+
 
 ### Back-end
 
