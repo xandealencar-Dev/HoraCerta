@@ -457,6 +457,10 @@ async function carregarPontosDoSupabase() {
             return 0;
         }
 
+        if (!entry || !isEntryComplete(entry)) {
+            return 0;
+        }
+
         if (isHoliday(entry.date) || entry.liberacaoEmpresa) {
             return 0;
         }
@@ -898,21 +902,92 @@ showDashboard();
     // ================= CORE CALCULATIONS & STATS =================
     
     /**
-     * Converts a time string (HH:MM) to total minutes from start of day.
+     * Converts a time string (HH:MM or HH:MM:SS) to total minutes from start of day.
      */
     function timeToMinutes(timeStr) {
-        const [h, m] = timeStr.split(':').map(Number);
-        return h * 60 + m;
+        if (!timeStr) return null;
+
+        const normalized = String(timeStr).trim();
+        if (!normalized) return null;
+
+        const parts = normalized.split(':').map(part => part.trim());
+        if (parts.length < 2 || parts.length > 3) {
+            return null;
+        }
+
+        const [hourPart, minutePart, secondPart = '0'] = parts;
+        const hour = Number(hourPart);
+        const minute = Number(minutePart);
+        const second = Number(secondPart);
+
+        if ([hour, minute, second].some(value => Number.isNaN(value))) {
+            return null;
+        }
+
+        if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) {
+            return null;
+        }
+
+        return hour * 60 + minute + second / 60;
     }
 
     /**
      * Converts total minutes to readable HH:MM formatting (un-signed).
      */
     function minutesToHoursString(totalMin) {
+        if (totalMin === null || Number.isNaN(totalMin)) {
+            return '0h 00min';
+        }
+
         const absMin = Math.abs(totalMin);
         const h = Math.floor(absMin / 60);
-        const m = absMin % 60;
+        const m = Math.floor(absMin % 60);
         return `${h}h ${m.toString().padStart(2, '0')}min`;
+    }
+
+    function createDateTimeFromDateAndTime(dateString, timeStr, anchorDate = null) {
+        if (!dateString || !timeStr) {
+            return null;
+        }
+
+        const normalized = String(timeStr).trim();
+        if (!normalized) {
+            return null;
+        }
+
+        const [year, month, day] = String(dateString).split('-').map(part => Number(part));
+        if ([year, month, day].some(value => Number.isNaN(value))) {
+            return null;
+        }
+
+        const parts = normalized.split(':').map(part => part.trim());
+        if (parts.length < 2 || parts.length > 3) {
+            return null;
+        }
+
+        const [hourPart, minutePart, secondPart = '0'] = parts;
+        const hour = Number(hourPart);
+        const minute = Number(minutePart);
+        const second = Number(secondPart);
+
+        if ([hour, minute, second].some(value => Number.isNaN(value))) {
+            return null;
+        }
+
+        if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) {
+            return null;
+        }
+
+        const parsedDate = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+        if (anchorDate && parsedDate < anchorDate) {
+            parsedDate.setUTCDate(parsedDate.getUTCDate() + 1);
+        }
+
+        return parsedDate;
+    }
+
+    function isEntryComplete(entry) {
+        return Boolean(entry?.date && entry?.entry && entry?.lunchOut && entry?.lunchReturn && entry?.exit);
     }
 
     function getContractConfig(contractType) {
@@ -920,9 +995,9 @@ showDashboard();
     }
 
     function formatDateString(date) {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
+        const year = date.getUTCFullYear();
+        const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(date.getUTCDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
     }
 
@@ -941,7 +1016,7 @@ showDashboard();
         const m = Math.floor((a + 11 * h + 22 * l) / 451);
         const month = Math.floor((h + l - 7 * m + 114) / 31);
         const day = ((h + l - 7 * m + 114) % 31) + 1;
-        return new Date(year, month - 1, day);
+        return new Date(Date.UTC(year, month - 1, day));
     }
 
     function getBrazilHolidays(year) {
@@ -964,18 +1039,18 @@ showDashboard();
 
         fixedHolidays.forEach(holiday => {
             holidays.push({
-                date: formatDateString(new Date(year, holiday.month - 1, holiday.day)),
+                date: formatDateString(new Date(Date.UTC(year, holiday.month - 1, holiday.day))),
                 name: holiday.name
             });
         });
 
         const easter = getEasterDate(year);
         const carnival = new Date(easter);
-        carnival.setDate(easter.getDate() - 47);
+        carnival.setUTCDate(easter.getUTCDate() - 47);
         const goodFriday = new Date(easter);
-        goodFriday.setDate(easter.getDate() - 2);
+        goodFriday.setUTCDate(easter.getUTCDate() - 2);
         const corpusChristi = new Date(easter);
-        corpusChristi.setDate(easter.getDate() + 60);
+        corpusChristi.setUTCDate(easter.getUTCDate() + 60);
 
         holidays.push(
             { date: formatDateString(carnival), name: 'Carnaval' },
@@ -1028,37 +1103,62 @@ showDashboard();
      * ISO week identifier (YYYY-Www) to group history points into calendar weeks.
      */
     function getWeekIdentifier(dateString) {
-        const date = new Date(dateString);
-        if (Number.isNaN(date.getTime())) {
+        const parsedDate = new Date(`${dateString}T00:00:00Z`);
+        if (Number.isNaN(parsedDate.getTime())) {
             return null;
         }
 
-        const tempDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-        tempDate.setDate(tempDate.getDate() + 4 - (tempDate.getDay() || 7));
-        const UTCyear = tempDate.getFullYear();
-        const firstThursday = new Date(UTCyear, 0, 4);
-        firstThursday.setDate(firstThursday.getDate() + 4 - (firstThursday.getDay() || 7));
+        const tempDate = new Date(parsedDate);
+        tempDate.setUTCDate(tempDate.getUTCDate() + 4 - (tempDate.getUTCDay() || 7));
+        const UTCyear = tempDate.getUTCFullYear();
+        const firstThursday = new Date(Date.UTC(UTCyear, 0, 4));
+        firstThursday.setUTCDate(firstThursday.getUTCDate() + 4 - (firstThursday.getUTCDay() || 7));
         const weekNumber = 1 + Math.ceil((tempDate - firstThursday) / 604800000);
         return `${UTCyear}-W${weekNumber.toString().padStart(2, '0')}`;
     }
 
     /**
      * Compute worked minutes for a specific single-day entry.
-     * Calculated by (LunchOut - Entry) + (Exit - LunchReturn)
+     * Calculated by (LunchOut - Entry) + (Exit - LunchReturn) using full date-time values.
      */
     function calculateWorkedMinutes(entry) {
-        const t1 = timeToMinutes(entry.entry);
-        const t2 = timeToMinutes(entry.lunchOut);
-        const t3 = timeToMinutes(entry.lunchReturn);
-        const t4 = timeToMinutes(entry.exit);
-        
-        return (t2 - t1) + (t4 - t3);
+        if (!entry || !isEntryComplete(entry)) {
+            return 0;
+        }
+
+        const startDate = createDateTimeFromDateAndTime(entry.date, entry.entry);
+        const lunchOutDate = createDateTimeFromDateAndTime(entry.date, entry.lunchOut, startDate);
+        const lunchReturnDate = createDateTimeFromDateAndTime(entry.date, entry.lunchReturn, lunchOutDate);
+        const exitDate = createDateTimeFromDateAndTime(entry.date, entry.exit, lunchReturnDate);
+
+        if (!startDate || !lunchOutDate || !lunchReturnDate || !exitDate) {
+            return 0;
+        }
+
+        const firstSegmentMs = lunchOutDate.getTime() - startDate.getTime();
+        const secondSegmentMs = exitDate.getTime() - lunchReturnDate.getTime();
+
+        if (firstSegmentMs < 0 || secondSegmentMs < 0) {
+            return 0;
+        }
+
+        return (firstSegmentMs + secondSegmentMs) / 60000;
     }
 
     function getDailyBalanceSummary(entry) {
         const config = getContractConfig(currentUser.contractType);
         const dailyTargetMinutes = getDailyTargetMinutes(entry.date, currentUser.contractType);
         const dailyWorkedMinutes = calculateWorkedMinutes(entry);
+
+        if (!isEntryComplete(entry)) {
+            return {
+                tone: 'warning',
+                label: 'Dia incompleto',
+                detail: 'Registro incompleto. O cálculo deste dia foi ignorado até que todos os horários sejam informados.',
+                debtMinutes: 0,
+                isComplete: false
+            };
+        }
         const dailyBalanceMinutes = dailyWorkedMinutes - dailyTargetMinutes;
         const absBalanceMinutes = Math.abs(dailyBalanceMinutes);
         const likelyDelay = dailyBalanceMinutes < 0 && timeToMinutes(entry.entry) > 8 * 60;
@@ -1186,17 +1286,17 @@ showDashboard();
     function getCurrentFolhaRange() {
         const todayStr = formatDateString(new Date());
         const [year, month, day] = todayStr.split('-').map(Number);
-        const currentDate = new Date(year, month - 1, day);
+        const currentDate = new Date(Date.UTC(year, month - 1, day));
 
         let startDate;
         let endDate;
 
         if (day < 25) {
-            startDate = new Date(year, month - 2, 25);
-            endDate = new Date(year, month - 1, 25);
+            startDate = new Date(Date.UTC(year, month - 2, 25));
+            endDate = new Date(Date.UTC(year, month - 1, 25));
         } else {
-            startDate = new Date(year, month - 1, 25);
-            endDate = new Date(year, month, 25);
+            startDate = new Date(Date.UTC(year, month - 1, 25));
+            endDate = new Date(Date.UTC(year, month, 25));
         }
 
         return {
@@ -1210,7 +1310,8 @@ showDashboard();
         const periodEntries = range
             ? [...entries].filter(entry => entry.date >= range.start && entry.date <= range.end)
             : [...entries];
-        const totalWorkedMinutes = periodEntries.reduce((sum, entry) => sum + calculateWorkedMinutes(entry), 0);
+        const completedEntries = periodEntries.filter(isEntryComplete);
+        const totalWorkedMinutes = completedEntries.reduce((sum, entry) => sum + calculateWorkedMinutes(entry), 0);
         const monthlyRequiredMinutes = getExpectedMonthlyMinutes();
         const netBalanceMinutes = monthlyRequiredMinutes > 0 ? totalWorkedMinutes - monthlyRequiredMinutes : 0;
 
@@ -1227,29 +1328,31 @@ showDashboard();
         const periodEntries = range
             ? [...entries].filter(entry => entry.date >= range.start && entry.date <= range.end)
             : [...entries];
+        const completedEntries = periodEntries.filter(isEntryComplete);
 
-        const totalWorkedMinutes = periodEntries.reduce((sum, entry) => sum + calculateWorkedMinutes(entry), 0);
+        const totalWorkedMinutes = completedEntries.reduce((sum, entry) => sum + calculateWorkedMinutes(entry), 0);
         const expectedMinutes = getExpectedMonthlyMinutes();
         const remainingMinutes = Math.max(0, expectedMinutes - totalWorkedMinutes);
         const balanceMinutes = totalWorkedMinutes - expectedMinutes;
         const overtimeMinutes = Math.max(0, balanceMinutes);
 
-        const delays = periodEntries.filter(entry => {
+        const delays = completedEntries.filter(entry => {
             const motivo = (entry.motivo || '').toLowerCase();
-            return calculateWorkedMinutes(entry) < getDailyTargetMinutes(entry.date, currentUser?.contractType || 'CLT') && timeToMinutes(entry.entry) > 8 * 60 && !motivo.includes('falta');
+            const entryMinutes = timeToMinutes(entry.entry);
+            return calculateWorkedMinutes(entry) < getDailyTargetMinutes(entry.date, currentUser?.contractType || 'CLT') && entryMinutes !== null && entryMinutes > 8 * 60 && !motivo.includes('falta');
         }).length;
 
-        const earlyExits = periodEntries.filter(entry => {
+        const earlyExits = completedEntries.filter(entry => {
             const motivo = (entry.motivo || '').toLowerCase();
             return motivo.includes('saída antecipada');
         }).length;
 
-        const absences = periodEntries.filter(entry => {
+        const absences = completedEntries.filter(entry => {
             const motivo = (entry.motivo || '').toLowerCase();
             return motivo.includes('falta');
         }).length;
 
-        const discount = periodEntries.reduce((sum, entry) => sum + calculateEntryDiscount(entry), 0);
+        const discount = completedEntries.reduce((sum, entry) => sum + calculateEntryDiscount(entry), 0);
         const salary = Number(currentUser?.salario) || 0;
         const netSalary = salary - discount;
 
